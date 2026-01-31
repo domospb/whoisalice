@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  database:
+    image: postgres:16-alpine  # Official PostgreSQL image (alpine = lightweight)
+    container_name: whoisalice_database
+    env_file:
+      - .env  # Load environment variables from .env file
+    volumes:
+      # Mount named volume to persist database data
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"  # Expose PostgreSQL port (host:container)
+    restart: unless-stopped  # Auto-restart on failure, but not if manually stopped
+    networks:
+      - backend  # Connect to backend network
+
+  # RabbitMQ Message Broker Service
+  rabbitmq:
+    image: rabbitmq:3-management-alpine  # RabbitMQ with management UI
+    container_name: whoisalice_rabbitmq
+    env_file:
+      - .env
+    volumes:
+      # Mount named volume to persist RabbitMQ data
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"   # AMQP protocol port
+      - "15672:15672" # Management web UI (http://localhost:15672)
+    restart: unless-stopped
+    networks:
+      - backend
+
+  # FastAPI Application Service
+  app:
+    build:
+      context: ./app  # Build context directory
+      dockerfile: Dockerfile  # Dockerfile name
+    container_name: whoisalice_app
+    env_file:
+      - ./app/.env  # Application-specific environment variables
+    depends_on:
+      # Wait for these services to start first (not waiting for "ready" state)
+      - database
+      - rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      # Check if app is healthy by calling /health endpoint
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s       # Check every 30 seconds
+      timeout: 10s        # Timeout after 10 seconds
+      retries: 3          # Retry 3 times before marking unhealthy
+      start_period: 40s   # Grace period before starting checks
+    networks:
+      - backend
+
+  # Nginx Reverse Proxy Service
+  web-proxy:
+    build:
+      context: ./web-proxy
+      dockerfile: Dockerfile
+    container_name: whoisalice_nginx
+    depends_on:
+      - app  # Start after app service
+    ports:
+      - "80:80"  # Expose HTTP port (main entry point for clients)
+    restart: unless-stopped
+    networks:
+      - backend
+
+# Named volumes - data persists even if containers are removed
+volumes:
+  postgres_data:   # PostgreSQL database files
+  rabbitmq_data:   # RabbitMQ queue data and config
+
+# Networks - allow containers to communicate with each other
+networks:
+  backend:
+    driver: bridge  # Default Docker network driver

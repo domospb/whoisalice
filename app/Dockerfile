@@ -7,9 +7,10 @@ WORKDIR /app
 
 # Install system dependencies needed for Python packages
 # gcc - needed to compile some Python packages
+# curl - needed for Docker healthcheck
 # Clean up apt cache after to reduce image size
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc && \
+    apt-get install -y --no-install-recommends gcc curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy only requirements first (Docker layer caching optimization)
