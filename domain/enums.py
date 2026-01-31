@@ -22,3 +22,9 @@ class TransactionType(str, Enum):
     """Type of balance transaction."""
     CREDIT = "credit"  # Adding funds to balance
     DEBIT = "debit"    # Deducting funds from balance
+
+
+class DataType(str, Enum):
+    """Type of input/output data for ML tasks."""
+    TEXT = "text"      # Text data
+    AUDIO = "audio"    # Voice/audio data
