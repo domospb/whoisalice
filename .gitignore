@@ -208,5 +208,5 @@ __marimo__/
 
 # Docker
 .env
+!.env.example
 volumes/
-*.env.local
