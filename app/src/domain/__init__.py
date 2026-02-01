@@ -6,6 +6,7 @@ from .ml_model import MLModel
 from .ml_task import MLTask, PredictionResult
 from .transaction import CreditTransaction, DebitTransaction, Transaction
 from .user import AdminUser, RegularUser, User
+from .wallet import Wallet
 
 __all__ = [
     # Enums
@@ -17,6 +18,8 @@ __all__ = [
     "User",
     "RegularUser",
     "AdminUser",
+    # Wallet
+    "Wallet",
     # Transaction models
     "Transaction",
     "CreditTransaction",

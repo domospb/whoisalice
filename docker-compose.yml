@@ -26,7 +26,7 @@ services:
     ports:
       - "5672:5672"   # AMQP protocol port
       - "15672:15672" # Management web UI (http://localhost:15672)
-    restart: unless-stopped
+    restart: on-failure  # Restart only on failure
     networks:
       - backend
 
@@ -37,7 +37,10 @@ services:
       dockerfile: Dockerfile  # Dockerfile name
     container_name: whoisalice_app
     env_file:
-      - ./app/.env  # Application-specific environment variables
+      - .env  # Load environment variables from root .env file
+    volumes:
+      # Mount source code for live reload during development
+      - ./app/src:/app/src
     depends_on:
       # Wait for these services to start first (not waiting for "ready" state)
       - database
@@ -55,14 +58,16 @@ services:
 
   # Nginx Reverse Proxy Service
   web-proxy:
-    build:
-      context: ./web-proxy
-      dockerfile: Dockerfile
+    image: nginx:alpine  # Official nginx image
     container_name: whoisalice_nginx
+    volumes:
+      # Mount custom nginx configuration
+      - ./web-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - app  # Start after app service
     ports:
-      - "80:80"  # Expose HTTP port (main entry point for clients)
+      - "80:80"    # HTTP port
+      - "443:443"  # HTTPS port
     restart: unless-stopped
     networks:
       - backend

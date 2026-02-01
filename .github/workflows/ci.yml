@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, fix/reviewer-comments ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    name: Lint with Ruff
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install ruff
+        run: pip install ruff==0.2.0
+      
+      - name: Run ruff check
+        run: ruff check app/
+      
+      - name: Run ruff format check
+        run: ruff format --check app/
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          cd app
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      
+      - name: Run tests
+        run: |
+          cd app
+          pytest tests/ -v --cov=src --cov-report=term
+
+  docker:
+    name: Validate Docker
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate docker-compose.yml
+        run: docker compose config
+      
+      - name: Build Docker images
+        run: docker compose build
