@@ -12,13 +12,11 @@ AI Voice Assistant with Text-to-Speech (TTS) and Speech-to-Text (STT) support.
 ## Setup
 
 ```bash
-# Copy environment files
+# Copy environment file
 cp .env.example .env
-cp app/.env.example app/.env
 
-# Change passwords in .env files
+# Change passwords in .env
 nano .env
-nano app/.env
 
 # Start services
 docker-compose up -d

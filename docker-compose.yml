@@ -37,7 +37,7 @@ services:
       dockerfile: Dockerfile  # Dockerfile name
     container_name: whoisalice_app
     env_file:
-      - ./app/.env  # Application-specific environment variables
+      - .env  # Load environment variables from root .env file
     depends_on:
       # Wait for these services to start first (not waiting for "ready" state)
       - database
