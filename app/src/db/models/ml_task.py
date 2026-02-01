@@ -48,9 +48,7 @@ class MLTaskModel(Base):
     __tablename__ = "ml_tasks"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE")
-    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     model_id: Mapped[UUID] = mapped_column(
         ForeignKey("ml_models.id", ondelete="RESTRICT")
     )

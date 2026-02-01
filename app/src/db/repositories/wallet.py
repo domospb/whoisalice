@@ -21,9 +21,7 @@ class WalletRepository:
         """
         self.session = session
 
-    async def create(
-        self, balance: float = 0.0, currency: str = "USD"
-    ) -> WalletModel:
+    async def create(self, balance: float = 0.0, currency: str = "USD") -> WalletModel:
         """
         Create a new wallet.
 
