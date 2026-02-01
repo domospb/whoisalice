@@ -19,7 +19,7 @@ class Wallet:
         wallet_id: Optional[UUID] = None,
         balance: float = 0.0,
         currency: str = "USD",
-        created_at: Optional[datetime] = None
+        created_at: Optional[datetime] = None,
     ):
         """
         Initialize a Wallet instance.

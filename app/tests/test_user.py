@@ -10,9 +10,7 @@ from src.domain.enums import UserRole
 def test_regular_user_creation():
     """Test regular user is created with correct role."""
     user = RegularUser(
-        username="testuser",
-        email="test@example.com",
-        password_hash="hashed_password"
+        username="testuser", email="test@example.com", password_hash="hashed_password"
     )
     assert user.username == "testuser"
     assert user.email == "test@example.com"
@@ -23,9 +21,7 @@ def test_regular_user_creation():
 def test_admin_user_creation():
     """Test admin user is created with correct role."""
     user = AdminUser(
-        username="admin",
-        email="admin@example.com",
-        password_hash="hashed_password"
+        username="admin", email="admin@example.com", password_hash="hashed_password"
     )
     assert user.role == UserRole.ADMIN
     assert user.is_admin() is True
@@ -38,6 +34,6 @@ def test_user_with_wallet():
         username="testuser",
         email="test@example.com",
         password_hash="hashed_password",
-        wallet_id=wallet_id
+        wallet_id=wallet_id,
     )
     assert user.wallet_id == wallet_id

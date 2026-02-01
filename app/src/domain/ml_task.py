@@ -23,7 +23,7 @@ class PredictionResult:
         valid_data: List[Dict[str, Any]],
         invalid_data: List[Dict[str, Any]],
         result_id: Optional[UUID] = None,
-        created_at: Optional[datetime] = None
+        created_at: Optional[datetime] = None,
     ):
         """
         Initialize a PredictionResult instance.
@@ -109,7 +109,7 @@ class MLTask:
         result: Optional[PredictionResult] = None,
         error_message: Optional[str] = None,
         created_at: Optional[datetime] = None,
-        completed_at: Optional[datetime] = None
+        completed_at: Optional[datetime] = None,
     ):
         """
         Initialize an MLTask instance.

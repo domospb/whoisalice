@@ -10,10 +10,10 @@ from .enums import UserRole
 
 class User:
     """
-    Base User class representing a user in the ML service.  
+    Base User class representing a user in the ML service.
     Encapsulates user data. Financial operations are handled by Wallet class.
     """
-  
+
     def __init__(
         self,
         username: str,
@@ -22,7 +22,7 @@ class User:
         role: UserRole,
         user_id: Optional[UUID] = None,
         wallet_id: Optional[UUID] = None,
-        created_at: Optional[datetime] = None
+        created_at: Optional[datetime] = None,
     ):
         """
         Initialize a User instance.
@@ -42,7 +42,7 @@ class User:
         self._role: UserRole = role
         self._wallet_id: Optional[UUID] = wallet_id
         self._created_at: datetime = created_at or datetime.utcnow()
-   
+
     # Getters (encapsulation)
     @property
     def id(self) -> UUID:
@@ -102,7 +102,7 @@ class RegularUser(User):
 
     Can perform ML predictions. Balance managed via separate Wallet.
     """
-    
+
     def __init__(
         self,
         username: str,
@@ -110,7 +110,7 @@ class RegularUser(User):
         password_hash: str,
         user_id: Optional[UUID] = None,
         wallet_id: Optional[UUID] = None,
-        created_at: Optional[datetime] = None
+        created_at: Optional[datetime] = None,
     ):
         """Initialize a RegularUser with REGULAR role."""
         super().__init__(
@@ -120,7 +120,7 @@ class RegularUser(User):
             role=UserRole.REGULAR,
             user_id=user_id,
             wallet_id=wallet_id,
-            created_at=created_at
+            created_at=created_at,
         )
 
 
@@ -138,7 +138,7 @@ class AdminUser(User):
         password_hash: str,
         user_id: Optional[UUID] = None,
         wallet_id: Optional[UUID] = None,
-        created_at: Optional[datetime] = None
+        created_at: Optional[datetime] = None,
     ):
         """Initialize an AdminUser with ADMIN role."""
         super().__init__(
@@ -148,5 +148,5 @@ class AdminUser(User):
             role=UserRole.ADMIN,
             user_id=user_id,
             wallet_id=wallet_id,
-            created_at=created_at
+            created_at=created_at,
         )

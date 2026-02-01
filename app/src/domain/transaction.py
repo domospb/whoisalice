@@ -27,7 +27,7 @@ class Transaction(ABC):
         user: Optional[User] = None,
         description: Optional[str] = None,
         transaction_id: Optional[UUID] = None,
-        timestamp: Optional[datetime] = None
+        timestamp: Optional[datetime] = None,
     ):
         """
         Initialize a Transaction instance.
@@ -134,7 +134,7 @@ class CreditTransaction(Transaction):
         user: Optional[User] = None,
         description: Optional[str] = None,
         transaction_id: Optional[UUID] = None,
-        timestamp: Optional[datetime] = None
+        timestamp: Optional[datetime] = None,
     ):
         """
         Initialize a CreditTransaction.
@@ -154,7 +154,7 @@ class CreditTransaction(Transaction):
             user=user,
             description=description or "Balance credit",
             transaction_id=transaction_id,
-            timestamp=timestamp
+            timestamp=timestamp,
         )
 
     def apply(self) -> None:
@@ -182,7 +182,7 @@ class DebitTransaction(Transaction):
         description: Optional[str] = None,
         ml_task_id: Optional[UUID] = None,
         transaction_id: Optional[UUID] = None,
-        timestamp: Optional[datetime] = None
+        timestamp: Optional[datetime] = None,
     ):
         """
         Initialize a DebitTransaction.
@@ -203,7 +203,7 @@ class DebitTransaction(Transaction):
             user=user,
             description=description or "Balance debit",
             transaction_id=transaction_id,
-            timestamp=timestamp
+            timestamp=timestamp,
         )
         self._ml_task_id: Optional[UUID] = ml_task_id
 

@@ -21,7 +21,7 @@ class MLModel:
         model_id: Optional[UUID] = None,
         version: str = "1.0.0",
         is_active: bool = True,
-        created_at: Optional[datetime] = None
+        created_at: Optional[datetime] = None,
     ):
         """
         Initialize an MLModel instance.
