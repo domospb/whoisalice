@@ -8,6 +8,8 @@ Loads environment variables and provides configuration for:
 - File storage paths
 """
 import logging
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,8 @@ class Settings(BaseSettings):
     # API
     API_V1_PREFIX: str = "/api/v1"
     PROJECT_NAME: str = "WhoIsAlice"
+    VERSION: str = "0.1.0"
+    DESCRIPTION: str = "AI Voice Assistant API"
 
     # Storage
     AUDIO_UPLOAD_DIR: str = "volumes/audio"
@@ -44,12 +48,22 @@ class Settings(BaseSettings):
         """Pydantic config."""
 
         env_file = ".env"
+        extra = "ignore"  # Ignore extra fields from .env
+
+    def ensure_directories(self):
+        """Create storage directories if they don't exist."""
+        Path(self.AUDIO_UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+        Path(self.AUDIO_RESULTS_DIR).mkdir(parents=True, exist_ok=True)
 
 
 # Global settings instance
 settings = Settings()
 
+# Ensure storage directories exist
+settings.ensure_directories()
+
 logger.info("Configuration loaded successfully")
-logger.info(f"Project: {settings.PROJECT_NAME}")
+logger.info(f"Project: {settings.PROJECT_NAME} v{settings.VERSION}")
 logger.info(f"Database: {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}")
 logger.info(f"Audio upload dir: {settings.AUDIO_UPLOAD_DIR}")
+logger.info(f"Token expiration: {settings.ACCESS_TOKEN_EXPIRE_MINUTES} minutes")
