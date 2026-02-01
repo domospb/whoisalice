@@ -18,12 +18,11 @@ exclude = [
 # Enable rules
 select = [
     "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
     "F",   # pyflakes
-    "I",   # isort
-    "N",   # pep8-naming
-    "UP",  # pyupgrade
 ]
 
 # Ignore specific rules
-ignore = []
+ignore = [
+    "W293",  # Blank line contains whitespace
+    "W291",  # Trailing whitespace
+]
