@@ -11,7 +11,7 @@ from .enums import UserRole
 class User:
     """
     Base User class representing a user in the ML service.  
-    Encapsulates user data and balance management logic.
+    Encapsulates user data. Financial operations are handled by Wallet class.
     """
   
     def __init__(
@@ -21,7 +21,7 @@ class User:
         password_hash: str,
         role: UserRole,
         user_id: Optional[UUID] = None,
-        balance: float = 0.0,
+        wallet_id: Optional[UUID] = None,
         created_at: Optional[datetime] = None
     ):
         """
@@ -32,7 +32,7 @@ class User:
             password_hash: Hashed password for authentication
             role: User role (REGULAR or ADMIN)
             user_id: Unique identifier (generated if not provided)
-            balance: Initial balance in credits (default: 0.0)
+            wallet_id: Reference to user's Wallet (optional)
             created_at: Account creation timestamp (default: now)
         """
         self._id: UUID = user_id or uuid4()
@@ -40,7 +40,7 @@ class User:
         self._email: str = email
         self._password_hash: str = password_hash
         self._role: UserRole = role
-        self._balance: float = balance
+        self._wallet_id: Optional[UUID] = wallet_id
         self._created_at: datetime = created_at or datetime.utcnow()
    
     # Getters (encapsulation)
@@ -70,57 +70,14 @@ class User:
         return self._role
 
     @property
-    def balance(self) -> float:
-        """Get current balance."""
-        return self._balance
+    def wallet_id(self) -> Optional[UUID]:
+        """Get wallet ID reference."""
+        return self._wallet_id
 
     @property
     def created_at(self) -> datetime:
         """Get account creation timestamp."""
         return self._created_at
-
-    # Balance management methods
-    def add_balance(self, amount: float) -> None:
-        """
-        Add credits to user's balance.
-
-        Args:
-            amount: Amount to add (must be positive)
-
-        Raises:
-            ValueError: If amount is not positive
-        """
-        if amount <= 0:
-            raise ValueError("Amount to add must be positive")
-        self._balance += amount
-
-    def deduct_balance(self, amount: float) -> None:
-        """
-        Deduct credits from user's balance.
-
-        Args:
-            amount: Amount to deduct (must be positive)
-
-        Raises:
-            ValueError: If amount is not positive or exceeds balance
-        """
-        if amount <= 0:
-            raise ValueError("Amount to deduct must be positive")
-        if amount > self._balance:
-            raise ValueError("Insufficient balance")
-        self._balance -= amount
-
-    def can_afford(self, amount: float) -> bool:
-        """
-        Check if user can afford a given amount.
-
-        Args:
-            amount: Amount to check
-
-        Returns:
-            True if balance is sufficient, False otherwise
-        """
-        return self._balance >= amount
 
     def is_admin(self) -> bool:
         """
@@ -135,7 +92,7 @@ class User:
         """String representation of User."""
         return (
             f"User(id={self._id}, username='{self._username}', "
-            f"role={self._role.value}, balance={self._balance})"
+            f"role={self._role.value}, wallet_id={self._wallet_id})"
         )
 
 
@@ -143,7 +100,7 @@ class RegularUser(User):
     """
     Regular user with standard privileges.
 
-    Can perform ML predictions and manage their own balance.
+    Can perform ML predictions. Balance managed via separate Wallet.
     """
     
     def __init__(
@@ -152,7 +109,7 @@ class RegularUser(User):
         email: str,
         password_hash: str,
         user_id: Optional[UUID] = None,
-        balance: float = 0.0,
+        wallet_id: Optional[UUID] = None,
         created_at: Optional[datetime] = None
     ):
         """Initialize a RegularUser with REGULAR role."""
@@ -162,7 +119,7 @@ class RegularUser(User):
             password_hash=password_hash,
             role=UserRole.REGULAR,
             user_id=user_id,
-            balance=balance,
+            wallet_id=wallet_id,
             created_at=created_at
         )
 
@@ -171,7 +128,7 @@ class AdminUser(User):
     """
     Administrator user with elevated privileges.
 
-    Can manage other users' balances and view all transactions.
+    Can manage wallets and view all transactions.
     """
 
     def __init__(
@@ -180,7 +137,7 @@ class AdminUser(User):
         email: str,
         password_hash: str,
         user_id: Optional[UUID] = None,
-        balance: float = 0.0,
+        wallet_id: Optional[UUID] = None,
         created_at: Optional[datetime] = None
     ):
         """Initialize an AdminUser with ADMIN role."""
@@ -190,21 +147,6 @@ class AdminUser(User):
             password_hash=password_hash,
             role=UserRole.ADMIN,
             user_id=user_id,
-            balance=balance,
+            wallet_id=wallet_id,
             created_at=created_at
         )
-
-    def moderate_balance(self, target_user: User, amount: float) -> None:
-        """
-        Add credits to another user's balance (admin privilege).
-
-        Args:
-            target_user: User whose balance to modify
-            amount: Amount to add (must be positive)
-
-        Raises:
-            ValueError: If amount is not positive
-        """
-        if amount <= 0:
-            raise ValueError("Amount to add must be positive")
-        target_user.add_balance(amount)

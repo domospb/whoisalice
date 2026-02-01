@@ -8,20 +8,23 @@ from uuid import UUID, uuid4
 
 from .enums import TransactionType
 from .user import User
+from .wallet import Wallet
 
 
 class Transaction(ABC):
     """
-    Abstract base class for balance transactions.
+    Abstract base class for wallet transactions.
 
     Implements polymorphic behavior for different transaction types.
+    Works with Wallet for financial operations.
     """
 
     def __init__(
         self,
         amount: float,
-        user: User,
+        wallet: Wallet,
         transaction_type: TransactionType,
+        user: Optional[User] = None,
         description: Optional[str] = None,
         transaction_id: Optional[UUID] = None,
         timestamp: Optional[datetime] = None
@@ -31,8 +34,9 @@ class Transaction(ABC):
 
         Args:
             amount: Transaction amount (must be positive)
-            user: User associated with this transaction
+            wallet: Wallet to perform transaction on
             transaction_type: Type of transaction (CREDIT or DEBIT)
+            user: User associated with this transaction (for audit trail)
             description: Optional description of the transaction
             transaction_id: Unique identifier (generated if not provided)
             timestamp: Transaction timestamp (default: now)
@@ -45,7 +49,8 @@ class Transaction(ABC):
 
         self._id: UUID = transaction_id or uuid4()
         self._amount: float = amount
-        self._user: User = user
+        self._wallet: Wallet = wallet
+        self._user: Optional[User] = user
         self._transaction_type: TransactionType = transaction_type
         self._description: str = description or ""
         self._timestamp: datetime = timestamp or datetime.utcnow()
@@ -62,14 +67,24 @@ class Transaction(ABC):
         return self._amount
 
     @property
-    def user(self) -> User:
-        """Get associated user."""
+    def wallet(self) -> Wallet:
+        """Get associated wallet."""
+        return self._wallet
+
+    @property
+    def wallet_id(self) -> UUID:
+        """Get associated wallet's ID."""
+        return self._wallet.id
+
+    @property
+    def user(self) -> Optional[User]:
+        """Get associated user (for audit trail)."""
         return self._user
 
     @property
-    def user_id(self) -> UUID:
+    def user_id(self) -> Optional[UUID]:
         """Get associated user's ID."""
-        return self._user.id
+        return self._user.id if self._user else None
 
     @property
     def transaction_type(self) -> TransactionType:
@@ -107,7 +122,7 @@ class Transaction(ABC):
 
 class CreditTransaction(Transaction):
     """
-    Credit transaction for adding funds to user's balance.
+    Credit transaction for adding funds to wallet.
 
     Used for balance top-ups and admin moderations.
     """
@@ -115,7 +130,8 @@ class CreditTransaction(Transaction):
     def __init__(
         self,
         amount: float,
-        user: User,
+        wallet: Wallet,
+        user: Optional[User] = None,
         description: Optional[str] = None,
         transaction_id: Optional[UUID] = None,
         timestamp: Optional[datetime] = None
@@ -125,15 +141,17 @@ class CreditTransaction(Transaction):
 
         Args:
             amount: Amount to credit (must be positive)
-            user: User receiving the credits
+            wallet: Wallet to credit
+            user: User associated with transaction (optional, for audit)
             description: Optional description (e.g., "Balance top-up")
             transaction_id: Unique identifier (generated if not provided)
             timestamp: Transaction timestamp (default: now)
         """
         super().__init__(
             amount=amount,
-            user=user,
+            wallet=wallet,
             transaction_type=TransactionType.CREDIT,
+            user=user,
             description=description or "Balance credit",
             transaction_id=transaction_id,
             timestamp=timestamp
@@ -141,17 +159,17 @@ class CreditTransaction(Transaction):
 
     def apply(self) -> None:
         """
-        Apply credit transaction by adding amount to user's balance.
+        Apply credit transaction by adding amount to wallet.
 
         Raises:
-            ValueError: If amount is invalid (handled by User.add_balance)
+            ValueError: If amount is invalid (handled by Wallet.add_balance)
         """
-        self._user.add_balance(self._amount)
+        self._wallet.add_balance(self._amount)
 
 
 class DebitTransaction(Transaction):
     """
-    Debit transaction for deducting funds from user's balance.
+    Debit transaction for deducting funds from wallet.
 
     Used when user makes ML prediction requests.
     """
@@ -159,7 +177,8 @@ class DebitTransaction(Transaction):
     def __init__(
         self,
         amount: float,
-        user: User,
+        wallet: Wallet,
+        user: Optional[User] = None,
         description: Optional[str] = None,
         ml_task_id: Optional[UUID] = None,
         transaction_id: Optional[UUID] = None,
@@ -170,7 +189,8 @@ class DebitTransaction(Transaction):
 
         Args:
             amount: Amount to debit (must be positive)
-            user: User being charged
+            wallet: Wallet to debit from
+            user: User associated with transaction (optional, for audit)
             description: Optional description (e.g., "ML prediction cost")
             ml_task_id: Optional reference to associated ML task
             transaction_id: Unique identifier (generated if not provided)
@@ -178,8 +198,9 @@ class DebitTransaction(Transaction):
         """
         super().__init__(
             amount=amount,
-            user=user,
+            wallet=wallet,
             transaction_type=TransactionType.DEBIT,
+            user=user,
             description=description or "Balance debit",
             transaction_id=transaction_id,
             timestamp=timestamp
@@ -193,9 +214,9 @@ class DebitTransaction(Transaction):
 
     def apply(self) -> None:
         """
-        Apply debit transaction by deducting amount from user's balance.
+        Apply debit transaction by deducting amount from wallet.
 
         Raises:
-            ValueError: If amount is invalid or user has insufficient balance
+            ValueError: If amount is invalid or wallet has insufficient balance
         """
-        self._user.deduct_balance(self._amount)
+        self._wallet.deduct_balance(self._amount)
