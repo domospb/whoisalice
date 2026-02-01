@@ -58,10 +58,11 @@ services:
 
   # Nginx Reverse Proxy Service
   web-proxy:
-    build:
-      context: ./web-proxy
-      dockerfile: Dockerfile
+    image: nginx:alpine  # Official nginx image
     container_name: whoisalice_nginx
+    volumes:
+      # Mount custom nginx configuration
+      - ./web-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - app  # Start after app service
     ports:
