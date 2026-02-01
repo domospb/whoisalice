@@ -6,7 +6,6 @@ This script is idempotent - safe to run multiple times.
 import asyncio
 
 from .init_db import create_tables
-from .models import MLModelModel, UserModel, WalletModel
 from .repositories.ml_model import MLModelRepository
 from .repositories.user import UserRepository
 from .repositories.wallet import WalletRepository
@@ -99,7 +98,8 @@ async def seed_demo_data():
                 print(f"Creating ML model: {model_data['name']}...")
                 model = await model_repo.create(**model_data)
                 print(
-                    f"✓ ML model created: {model.name} (cost: ${model.cost_per_prediction})"
+                    f"✓ ML model created: {model.name} "
+                    f"(cost: ${model.cost_per_prediction})"
                 )
             else:
                 print(f"✓ ML model already exists: {existing_model.name}")

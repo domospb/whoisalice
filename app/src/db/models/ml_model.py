@@ -30,4 +30,7 @@ class MLModelModel(Base):
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"<MLModel(id={self.id}, name='{self.name}', cost={self.cost_per_prediction})>"
+        return (
+            f"<MLModel(id={self.id}, name='{self.name}', "
+            f"cost={self.cost_per_prediction})>"
+        )

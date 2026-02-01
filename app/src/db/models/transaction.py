@@ -26,9 +26,11 @@ class TransactionModel(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     amount: Mapped[float] = mapped_column(DECIMAL(10, 2))
-    transaction_type: Mapped[str] = mapped_column(String(10))  # credit or debit
+    transaction_type: Mapped[str] = mapped_column(String(10))
     description: Mapped[str] = mapped_column(Text, default="")
-    wallet_id: Mapped[UUID] = mapped_column(ForeignKey("wallets.id", ondelete="CASCADE"))
+    wallet_id: Mapped[UUID] = mapped_column(
+        ForeignKey("wallets.id", ondelete="CASCADE")
+    )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -43,4 +45,7 @@ class TransactionModel(Base):
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"<Transaction(id={self.id}, type={self.transaction_type}, amount={self.amount})>"
+        return (
+            f"<Transaction(id={self.id}, type={self.transaction_type}, "
+            f"amount={self.amount})>"
+        )

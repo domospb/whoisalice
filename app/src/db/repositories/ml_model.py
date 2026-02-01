@@ -92,6 +92,6 @@ class MLModelRepository:
             List of active ML models
         """
         result = await self.session.execute(
-            select(MLModelModel).where(MLModelModel.is_active == True)
+            select(MLModelModel).where(MLModelModel.is_active.is_(True))
         )
         return list(result.scalars().all())

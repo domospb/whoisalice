@@ -1,16 +1,8 @@
 """
 Database initialization utilities.
 """
-from sqlalchemy.ext.asyncio import AsyncEngine
-
-from .models import (
-    MLModelModel,
-    MLTaskModel,
-    PredictionResultModel,
-    TransactionModel,
-    UserModel,
-    WalletModel,
-)
+# Import models to register them with SQLAlchemy metadata
+from . import models  # noqa: F401
 from .session import Base, engine
 
 

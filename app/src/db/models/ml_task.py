@@ -32,7 +32,10 @@ class PredictionResultModel(Base):
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"<PredictionResult(id={self.id}, valid={self.valid_data}, invalid={self.invalid_data})>"
+        return (
+            f"<PredictionResult(id={self.id}, valid={self.valid_data}, "
+            f"invalid={self.invalid_data})>"
+        )
 
 
 class MLTaskModel(Base):
@@ -45,8 +48,12 @@ class MLTaskModel(Base):
     __tablename__ = "ml_tasks"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    model_id: Mapped[UUID] = mapped_column(ForeignKey("ml_models.id", ondelete="RESTRICT"))
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE")
+    )
+    model_id: Mapped[UUID] = mapped_column(
+        ForeignKey("ml_models.id", ondelete="RESTRICT")
+    )
     input_data: Mapped[str] = mapped_column(Text)
     input_type: Mapped[str] = mapped_column(String(10))  # text or audio
     output_type: Mapped[str] = mapped_column(String(10))  # text or audio

@@ -92,7 +92,8 @@ async def test_operations():
         print()
         for i, tx in enumerate(transactions, 1):
             print(
-                f"   [{i}] {tx.transaction_type.upper()}: ${tx.amount} - {tx.description}"
+                f"   [{i}] {tx.transaction_type.upper()}: ${tx.amount} - "
+                f"{tx.description}"
             )
             print(f"       Timestamp: {tx.timestamp}")
             print()
