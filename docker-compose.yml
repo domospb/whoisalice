@@ -38,6 +38,9 @@ services:
     container_name: whoisalice_app
     env_file:
       - .env  # Load environment variables from root .env file
+    volumes:
+      # Mount source code for live reload during development
+      - ./app/src:/app/src
     depends_on:
       # Wait for these services to start first (not waiting for "ready" state)
       - database
