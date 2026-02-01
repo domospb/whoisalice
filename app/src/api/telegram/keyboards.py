@@ -6,7 +6,6 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
     InlineKeyboardMarkup,
-    InlineKeyboardButton,
 )
 
 logger = logging.getLogger(__name__)

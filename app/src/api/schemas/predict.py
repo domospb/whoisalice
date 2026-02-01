@@ -2,13 +2,15 @@
 Prediction request/response schemas.
 """
 import logging
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
 
 class TextPredictRequest(BaseModel):
     """Text prediction request."""
+
+    model_config = ConfigDict(protected_namespaces=())
 
     text: str
     model_name: str = "GPT-4 TTS"
@@ -27,6 +29,8 @@ class PredictionResponse(BaseModel):
 
 class PredictionHistoryResponse(BaseModel):
     """Prediction history item."""
+
+    model_config = ConfigDict(protected_namespaces=())
 
     task_id: str
     created_at: str
