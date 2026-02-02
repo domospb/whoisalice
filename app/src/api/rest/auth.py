@@ -8,9 +8,9 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...db.session import get_db
-from ...services.auth_service import AuthService
-from ..schemas.auth import (
+from src.db.session import get_db
+from src.services.auth_service import AuthService
+from src.api.schemas.auth import (
     RegisterRequest,
     LoginRequest,
     TokenResponse,

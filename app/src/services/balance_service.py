@@ -9,9 +9,9 @@ Handles:
 import logging
 from uuid import UUID
 
-from ..db.repositories.user import UserRepository
-from ..db.repositories.wallet import WalletRepository
-from ..db.repositories.transaction import TransactionRepository
+from src.db.repositories.user import UserRepository
+from src.db.repositories.wallet import WalletRepository
+from src.db.repositories.transaction import TransactionRepository
 
 logger = logging.getLogger(__name__)
 

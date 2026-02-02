@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.transaction import TransactionModel
+from src.db.models.transaction import TransactionModel
 
 
 class TransactionRepository:

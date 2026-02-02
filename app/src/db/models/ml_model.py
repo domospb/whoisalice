@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import DECIMAL, Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..session import Base
+from src.db.session import Base
 
 
 class MLModelModel(Base):

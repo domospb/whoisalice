@@ -20,14 +20,14 @@ from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, FSInputFile
 
-from ...db.session import AsyncSessionLocal
-from ...services.auth_service import AuthService
-from ...services.balance_service import BalanceService
-from ...services.audio_service import AudioService
-from ...services.stt_service import STTService
-from ...services.tts_service import TTSService
-from ...services.prediction_service import PredictionService
-from ...services.history_service import HistoryService
+from src.db.session import AsyncSessionLocal
+from src.services.auth_service import AuthService
+from src.services.balance_service import BalanceService
+from src.services.audio_service import AudioService
+from src.services.stt_service import STTService
+from src.services.tts_service import TTSService
+from src.services.prediction_service import PredictionService
+from src.services.history_service import HistoryService
 
 logger = logging.getLogger(__name__)
 

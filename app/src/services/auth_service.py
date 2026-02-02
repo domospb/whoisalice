@@ -9,13 +9,13 @@ Handles:
 import logging
 from uuid import UUID
 
-from ..core.security import (
+from src.core.security import (
     get_password_hash,
     verify_password,
     create_access_token,
 )
-from ..db.repositories.user import UserRepository
-from ..db.repositories.wallet import WalletRepository
+from src.db.repositories.user import UserRepository
+from src.db.repositories.wallet import WalletRepository
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class AuthService:
         logger.info(f"User registered successfully: {user.username} (ID: {user.id})")
 
         return {
-            "user_id": str(user.id),
+            "id": str(user.id),
             "username": user.username,
             "email": user.email,
             "role": user.role,

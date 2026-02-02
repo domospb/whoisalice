@@ -8,8 +8,9 @@ Retrieves historical data:
 import logging
 from uuid import UUID
 
-from ..db.repositories.transaction import TransactionRepository
-from ..db.repositories.user import UserRepository
+from src.db.repositories.transaction import TransactionRepository
+from src.db.repositories.ml_task import MLTaskRepository
+from src.db.repositories.user import UserRepository
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class HistoryService:
         """Initialize with database session."""
         self.session = session
         self.transaction_repo = TransactionRepository(session)
+        self.mltask_repo = MLTaskRepository(session)
         self.user_repo = UserRepository(session)
         logger.info("HistoryService initialized")
 
@@ -70,8 +72,7 @@ class HistoryService:
         """
         Get user's prediction history.
 
-        NOTE: Mock implementation for Stage 4.
-        Real implementation will query MLTask table in Stage 5.
+        Stage 5: Query MLTask table.
 
         Args:
             user_id: User UUID
@@ -81,20 +82,45 @@ class HistoryService:
         """
         logger.info(f"Getting prediction history for user: {user_id}")
 
-        # TODO: Stage 5 - Implement real prediction history
-        # predictions = await self.mltask_repo.get_by_user(user_id)
+        # Verify user exists
+        user = await self.user_repo.get_by_id(user_id)
+        if not user:
+            logger.warning(f"User not found: {user_id}")
+            raise ValueError("User not found")
 
-        logger.warning("MOCK: Prediction history not available in Stage 4")
+        # Get MLTasks
+        tasks = await self.mltask_repo.get_by_user(user_id)
 
-        # Return empty list for now
-        return []
+        logger.debug(f"Found {len(tasks)} predictions")
+
+        # Format tasks
+        result = []
+        for task in tasks:
+            result.append(
+                {
+                    "task_id": str(task.id),
+                    "status": task.status,
+                    "model_name": task.model.name if task.model else "Unknown",
+                    "input_type": task.input_type,
+                    "output_type": task.output_type,
+                    "created_at": task.created_at.isoformat(),
+                    "completed_at": task.completed_at.isoformat()
+                    if task.completed_at
+                    else None,
+                    "cost": float(task.model.cost_per_prediction)
+                    if task.model
+                    else 0.0,
+                }
+            )
+
+        logger.info(f"Prediction history retrieved: {len(result)} records")
+        return result
 
     async def get_prediction_by_id(self, user_id: UUID, task_id: UUID) -> dict:
         """
         Get specific prediction details.
 
-        NOTE: Mock implementation for Stage 4.
-        Real implementation will query MLTask table in Stage 5.
+        Stage 5: Query MLTask from database.
 
         Args:
             user_id: User UUID
@@ -104,15 +130,49 @@ class HistoryService:
             dict with prediction details
 
         Raises:
-            ValueError: If prediction not found
+            ValueError: If prediction not found or access denied
         """
         logger.info(f"Getting prediction {task_id} for user {user_id}")
 
-        # TODO: Stage 5 - Implement real prediction retrieval
-        # task = await self.mltask_repo.get_by_id(task_id)
-        # if not task or task.user_id != user_id:
-        #     raise ValueError("Prediction not found")
+        task = await self.mltask_repo.get_by_id(task_id)
 
-        logger.warning("MOCK: Prediction retrieval not available in Stage 4")
+        if not task:
+            logger.warning(f"Task not found: {task_id}")
+            raise ValueError("Prediction not found")
 
-        raise ValueError("Prediction history not available in Stage 4")
+        if task.user_id != user_id:
+            logger.warning(
+                f"Access denied: Task {task_id} does not belong to user {user_id}"
+            )
+            raise ValueError("Access denied")
+
+        # Format task details
+        result = {
+            "task_id": str(task.id),
+            "status": task.status,
+            "model_name": task.model.name if task.model else "Unknown",
+            "input_type": task.input_type,
+            "output_type": task.output_type,
+            "input_data": task.input_data,
+            "created_at": task.created_at.isoformat(),
+            "completed_at": task.completed_at.isoformat()
+            if task.completed_at
+            else None,
+            "cost": float(task.model.cost_per_prediction)
+            if task.model
+            else 0.0,
+        }
+
+        if task.result:
+            result["prediction_data"] = task.result.prediction_data
+            result["valid_count"] = task.result.valid_data
+            result["invalid_count"] = task.result.invalid_data
+
+        if task.error_message:
+            result["error_message"] = task.error_message
+
+        if task.status == "completed":
+            result["audio_url"] = f"/api/v1/predict/{task.id}/audio"
+
+        logger.info(f"Prediction details retrieved for task {task_id}")
+        return result

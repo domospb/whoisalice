@@ -1,8 +1,10 @@
 """
 Prediction REST endpoints.
 
-POST /predict/text - Text-based prediction
-POST /predict/audio - Audio file prediction
+Stage 5: Integrated with RabbitMQ for asynchronous processing.
+
+POST /predict/text - Text-based prediction (queued)
+POST /predict/audio - Audio file prediction (queued)
 GET /predict/{task_id} - Get prediction result
 GET /predict/{task_id}/audio - Download result audio
 """
@@ -10,18 +12,16 @@ import logging
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...core.config import settings
-from ...core.security import get_current_user_id
-from ...db.session import get_db
-from ...services.audio_service import AudioService
-from ...services.stt_service import STTService
-from ...services.tts_service import TTSService
-from ...services.prediction_service import PredictionService
-from ..schemas.predict import TextPredictRequest, PredictionResponse
+from src.core.config import settings
+from src.core.security import get_current_user_id
+from src.db.session import get_db
+from src.services.audio_service import AudioService
+from src.services.prediction_service import PredictionService
+from src.api.schemas.predict import TextPredictRequest, PredictionResponse
 
 logger = logging.getLogger(__name__)
 
@@ -32,36 +32,48 @@ logger.info("Predict router initialized")
 
 @router.post("/text", response_model=PredictionResponse)
 async def predict_text(
-    request: TextPredictRequest,
+    predict_request: TextPredictRequest,
+    req: Request,
     user_id: str = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
     """
-    Process text prediction.
+    Queue text prediction for asynchronous processing.
+
+    Stage 5: Creates MLTask and publishes to RabbitMQ.
+    Returns task_id immediately with status="pending".
 
     Requires authentication.
-    Deducts credits from user balance.
     """
     logger.info(f"POST /predict/text called for user {user_id}")
 
+    # Get task publisher from app state
+    task_publisher = getattr(req.app.state, "task_publisher", None)
+
     # Initialize services
     audio_service = AudioService()
-    stt_service = STTService()
-    tts_service = TTSService()
     prediction_service = PredictionService(
-        session, audio_service, stt_service, tts_service
+        session, audio_service, task_publisher=task_publisher
     )
 
     try:
         result = await prediction_service.process_text_prediction(
             user_id=UUID(user_id),
-            input_text=request.text,
-            model_name=request.model_name,
+            input_text=predict_request.text,
+            model_name=predict_request.model_name,
         )
 
-        logger.info(f"Text prediction completed: {result['task_id']}")
+        logger.info(
+            f"Text prediction task created: {result['task_id']} (status=pending)"
+        )
 
-        return PredictionResponse(**result)
+        return PredictionResponse(
+            task_id=result["task_id"],
+            status=result["status"],
+            input_text=result["input_text"],
+            result_text=result.get("message"),
+            cost=result["cost"],
+        )
 
     except ValueError as e:
         logger.warning(f"Text prediction failed: {e}")
@@ -81,27 +93,31 @@ async def predict_text(
 async def predict_audio(
     audio: UploadFile = File(...),
     model_name: str = "Whisper STT",
+    req: Request = None,
     user_id: str = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
     """
-    Process audio prediction.
+    Queue audio prediction for asynchronous processing.
+
+    Stage 5: Creates MLTask and publishes to RabbitMQ.
+    Returns task_id immediately with status="pending".
 
     Requires authentication.
     Accepts audio files (OGG, MP3, WAV, M4A).
-    Deducts credits from user balance.
     """
     logger.info(f"POST /predict/audio called for user {user_id}: {audio.filename}")
 
     # Read audio file
     audio_data = await audio.read()
 
+    # Get task publisher from app state
+    task_publisher = getattr(req.app.state, "task_publisher", None)
+
     # Initialize services
     audio_service = AudioService()
-    stt_service = STTService()
-    tts_service = TTSService()
     prediction_service = PredictionService(
-        session, audio_service, stt_service, tts_service
+        session, audio_service, task_publisher=task_publisher
     )
 
     try:
@@ -112,14 +128,15 @@ async def predict_audio(
             model_name=model_name,
         )
 
-        logger.info(f"Audio prediction completed: {result['task_id']}")
+        logger.info(
+            f"Audio prediction task created: {result['task_id']} (status=pending)"
+        )
 
         return PredictionResponse(
             task_id=result["task_id"],
             status=result["status"],
-            input_text=result.get("transcription", ""),
-            result_text=result.get("result_text"),
-            audio_url=result.get("audio_url"),
+            input_text="[Audio file uploaded]",
+            result_text=result.get("message"),
             cost=result["cost"],
         )
 
@@ -144,19 +161,43 @@ async def get_prediction(
     session: AsyncSession = Depends(get_db),
 ):
     """
-    Get prediction result.
+    Get prediction result by task ID.
+
+    Stage 5: Retrieves MLTask from database with status.
 
     Requires authentication.
-    NOTE: Not fully implemented in Stage 4.
+    Returns task status (pending, processing, completed, failed).
     """
     logger.info(f"GET /predict/{task_id} called for user {user_id}")
 
-    # TODO: Stage 5 - Implement task retrieval from database
+    # Initialize services
+    audio_service = AudioService()
+    prediction_service = PredictionService(session, audio_service)
 
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Prediction history not available in Stage 4",
-    )
+    try:
+        result = await prediction_service.get_prediction_result(
+            task_id=UUID(task_id), user_id=UUID(user_id)
+        )
+
+        logger.info(
+            f"Prediction result retrieved: {task_id}, "
+            f"status={result['status']}"
+        )
+
+        return result
+
+    except ValueError as e:
+        logger.warning(f"Prediction retrieval failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Prediction retrieval error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve prediction",
+        )
 
 
 @router.get("/{task_id}/audio")

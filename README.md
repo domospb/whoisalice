@@ -2,6 +2,8 @@
 
 AI Voice Assistant with Text-to-Speech (TTS) and Speech-to-Text (STT) support.
 
+**Stage 5**: Asynchronous ML task processing with RabbitMQ workers.
+
 ## Features
 
 - 🎙️ **Voice Processing**: STT (Speech-to-Text) and TTS (Text-to-Speech)
@@ -10,10 +12,12 @@ AI Voice Assistant with Text-to-Speech (TTS) and Speech-to-Text (STT) support.
 - 📊 **Transaction History**: Track all operations
 - 🤖 **Telegram Bot**: Full-featured bot interface
 - 🌐 **REST API**: Complete API with Swagger docs
+- ⚡ **Async Processing**: RabbitMQ queue with multiple workers (Stage 5)
 
 ## Services
 
-- **app** - FastAPI application
+- **app** - FastAPI application (publisher)
+- **worker** - ML task workers (consumers, scalable)
 - **web-proxy** - Nginx reverse proxy
 - **database** - PostgreSQL 16
 - **rabbitmq** - RabbitMQ message broker
@@ -36,8 +40,11 @@ nano .env
 ### 2. Start Services
 
 ```bash
-# Start all services
+# Start all services (including 2 workers by default)
 docker-compose up -d
+
+# Or start with custom number of workers
+docker-compose up -d --scale worker=3
 
 # Initialize database with demo data
 cd app
@@ -91,6 +98,55 @@ curl -X POST http://localhost:8000/api/v1/predict/text \
 
 **Or use Swagger UI:** http://localhost:8000/docs
 
+### Stage 5: Async Processing with Workers
+
+**How it works:**
+1. API/Bot receives prediction request
+2. Creates MLTask in database (status=pending)
+3. Publishes task to RabbitMQ queue
+4. Returns task_id immediately to user
+5. Workers consume tasks from queue
+6. Workers process task, deduct balance, save results
+7. Task status updated: pending → processing → completed/failed
+
+**Submit a task:**
+```bash
+# Text prediction (returns task_id immediately)
+curl -X POST http://localhost:8000/api/v1/predict/text \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello, WhoIsAlice!", "model_name": "GPT-4 TTS"}'
+
+# Response: {"task_id": "uuid", "status": "pending", "cost": 1.0}
+```
+
+**Check task status:**
+```bash
+# Get task result (check status and result)
+curl -X GET http://localhost:8000/api/v1/predict/{task_id} \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Response includes: status (pending/processing/completed/failed)
+```
+
+**View prediction history:**
+```bash
+curl -X GET http://localhost:8000/api/v1/history/predictions \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Scale workers:**
+```bash
+# Scale up to 5 workers
+docker-compose up -d --scale worker=5
+
+# Scale down to 1 worker
+docker-compose up -d --scale worker=1
+
+# View worker logs
+docker-compose logs -f worker
+```
+
 ### Telegram Bot
 
 **Start the bot:**
@@ -135,26 +191,89 @@ python test_operations.py
 
 Use Swagger UI at http://localhost:8000/docs or curl commands above.
 
+### Test Stage 5: Async Workers
+
+**1. Check RabbitMQ Management UI:**
+- Open http://localhost:15672 (guest/guest)
+- Go to "Queues" tab
+- See `ml_tasks` queue
+
+**2. Submit multiple tasks:**
+```bash
+# Login and get token first
+TOKEN="your_jwt_token_here"
+
+# Submit 5 tasks in a row
+for i in {1..5}; do
+  curl -X POST http://localhost:8000/api/v1/predict/text \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"text\": \"Test message $i\", \"model_name\": \"GPT-4 TTS\"}"
+  echo ""
+done
+```
+
+**3. Watch workers process tasks:**
+```bash
+# View worker logs (you'll see round-robin distribution)
+docker-compose logs -f worker
+
+# Expected output:
+# worker-1 | Processing task: abc-123...
+# worker-2 | Processing task: def-456...
+# worker-1 | Processing task: ghi-789...
+```
+
+**4. Verify results:**
+```bash
+# Check predictions history
+curl -X GET http://localhost:8000/api/v1/history/predictions \
+  -H "Authorization: Bearer $TOKEN"
+
+# Check specific task status
+curl -X GET http://localhost:8000/api/v1/predict/{task_id} \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**5. Test scaling:**
+```bash
+# Scale to 5 workers
+docker-compose up -d --scale worker=5
+
+# Submit more tasks and watch distribution
+docker-compose logs -f worker
+```
+
 ### Test Telegram Bot
 
 1. Start bot: `docker-compose exec app python -m src.api.telegram.bot`
 2. Open Telegram and find your bot
 3. Try commands: `/start`, `/register`, `/login`, etc.
+4. Send text/voice messages and receive task_id
+5. Tasks are processed asynchronously by workers
 
 ## Commands
 
 ```bash
-# Start
+# Start all services
 docker-compose up -d
+
+# Start with custom number of workers
+docker-compose up -d --scale worker=3
 
 # Stop
 docker-compose down
 
 # View logs
-docker-compose logs -f
+docker-compose logs -f              # All services
+docker-compose logs -f app          # API only
+docker-compose logs -f worker       # All workers
 
 # Rebuild
 docker-compose up -d --build
+
+# Restart workers only
+docker-compose restart worker
 ```
 
 ## Project Structure
@@ -175,18 +294,23 @@ whoisalice/
 │   │   │   ├── balance_service.py
 │   │   │   ├── prediction_service.py
 │   │   │   └── ...
+│   │   ├── queue/                # RabbitMQ (Stage 5)
+│   │   │   ├── connection.py     # RabbitMQ connection
+│   │   │   ├── publisher.py      # Task publisher
+│   │   │   └── consumer.py       # Task consumer base
 │   │   ├── domain/               # Domain models
 │   │   ├── db/                   # Database layer
 │   │   │   ├── models/           # ORM models
 │   │   │   └── repositories/     # Data access
+│   │   ├── worker.py             # ML Worker (Stage 5)
 │   │   └── main.py               # FastAPI app
 │   ├── init_db.py                # DB initialization
 │   ├── test_operations.py        # DB tests
 │   └── requirements.txt
 ├── web-proxy/                    # Nginx
 ├── volumes/                      # Storage
-│   ├── audio/                    # Uploaded audio
-│   └── results/                  # Generated audio
+│   ├── audio_uploads/            # Uploaded audio
+│   └── audio_results/            # Generated audio
 ├── docker-compose.yml
 └── .env                          # Configuration
 ```

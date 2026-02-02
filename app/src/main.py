@@ -2,6 +2,8 @@
 WhoIsAlice FastAPI Application.
 
 AI Voice Assistant API with TTS and STT operations.
+
+Stage 5: Integrated with RabbitMQ for asynchronous ML task processing.
 """
 import logging
 
@@ -10,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.rest import auth, balance, predict, history
 from .core.config import settings
+from .queue.connection import get_rabbitmq_connection
+from .queue.publisher import TaskPublisher
 
 # Configure logging
 logging.basicConfig(
@@ -74,8 +78,38 @@ async def startup_event():
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     logger.info("API documentation available at /docs")
 
+    # Initialize RabbitMQ connection and publisher
+    try:
+        logger.info("Initializing RabbitMQ connection...")
+        rabbitmq_connection = await get_rabbitmq_connection()
+        await rabbitmq_connection.connect()
+        channel = await rabbitmq_connection.get_channel()
+
+        # Create task publisher
+        task_publisher = TaskPublisher(channel)
+        await task_publisher.setup_queue()
+
+        # Store in app state for access in endpoints
+        app.state.rabbitmq_connection = rabbitmq_connection
+        app.state.task_publisher = task_publisher
+
+        logger.info("RabbitMQ connection established successfully")
+    except Exception as e:
+        logger.error(f"Failed to connect to RabbitMQ: {e}")
+        logger.warning("Application will run without queue functionality")
+        app.state.rabbitmq_connection = None
+        app.state.task_publisher = None
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Run on application shutdown."""
     logger.info(f"Shutting down {settings.PROJECT_NAME}")
+
+    # Close RabbitMQ connection
+    if hasattr(app.state, "rabbitmq_connection") and app.state.rabbitmq_connection:
+        try:
+            await app.state.rabbitmq_connection.close()
+            logger.info("RabbitMQ connection closed")
+        except Exception as e:
+            logger.error(f"Error closing RabbitMQ connection: {e}")

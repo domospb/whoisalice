@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.ml_model import MLModelModel
+from src.db.models.ml_model import MLModelModel
 
 
 class MLModelRepository:

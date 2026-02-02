@@ -10,10 +10,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...core.security import get_current_user_id
-from ...db.session import get_db
-from ...services.balance_service import BalanceService
-from ..schemas.balance import BalanceResponse, TopUpRequest, TopUpResponse
+from src.core.security import get_current_user_id
+from src.db.session import get_db
+from src.services.balance_service import BalanceService
+from src.api.schemas.balance import BalanceResponse, TopUpRequest, TopUpResponse
 
 logger = logging.getLogger(__name__)
 

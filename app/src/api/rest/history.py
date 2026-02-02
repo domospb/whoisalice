@@ -10,9 +10,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...core.security import get_current_user_id
-from ...db.session import get_db
-from ...services.history_service import HistoryService
+from src.core.security import get_current_user_id
+from src.db.session import get_db
+from src.services.history_service import HistoryService
 
 logger = logging.getLogger(__name__)
 

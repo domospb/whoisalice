@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.wallet import WalletModel
+from src.db.models.wallet import WalletModel
 
 
 class WalletRepository:
