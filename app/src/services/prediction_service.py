@@ -74,9 +74,7 @@ class PredictionService:
 
         current_balance = float(user.wallet.balance)
         if current_balance < cost:
-            logger.warning(
-                f"Insufficient balance: {current_balance} < {cost}"
-            )
+            logger.warning(f"Insufficient balance: {current_balance} < {cost}")
             raise ValueError(
                 f"Insufficient balance. Required: ${cost}, "
                 f"Available: ${current_balance}"
@@ -149,9 +147,7 @@ class PredictionService:
         Raises:
             ValueError: If model not found or insufficient balance
         """
-        logger.info(
-            f"Processing audio prediction for user {user_id}: {filename}"
-        )
+        logger.info(f"Processing audio prediction for user {user_id}: {filename}")
 
         # Get ML model
         model = await self.model_repo.get_by_name(model_name)
@@ -168,9 +164,7 @@ class PredictionService:
 
         current_balance = float(user.wallet.balance)
         if current_balance < cost:
-            logger.warning(
-                f"Insufficient balance: {current_balance} < {cost}"
-            )
+            logger.warning(f"Insufficient balance: {current_balance} < {cost}")
             raise ValueError(
                 f"Insufficient balance. Required: ${cost}, "
                 f"Available: ${current_balance}"
@@ -203,9 +197,7 @@ class PredictionService:
 
         # TTS: Convert response to audio
         result_audio_filename = f"{task_id}_result.ogg"
-        result_audio_path = (
-            Path(settings.AUDIO_RESULTS_DIR) / result_audio_filename
-        )
+        result_audio_path = Path(settings.AUDIO_RESULTS_DIR) / result_audio_filename
         await self.tts_service.synthesize(response_text, str(result_audio_path))
 
         # Deduct credits

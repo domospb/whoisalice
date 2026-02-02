@@ -93,9 +93,7 @@ class BalanceService:
         new_balance = old_balance + amount
 
         # Update wallet balance
-        logger.debug(
-            f"Updating balance: {old_balance} -> {new_balance}"
-        )
+        logger.debug(f"Updating balance: {old_balance} -> {new_balance}")
         await self.wallet_repo.update_balance(user.wallet.id, new_balance)
 
         # Create credit transaction

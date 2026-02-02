@@ -84,16 +84,12 @@ class HistoryService:
         # TODO: Stage 5 - Implement real prediction history
         # predictions = await self.mltask_repo.get_by_user(user_id)
 
-        logger.warning(
-            "MOCK: Prediction history not available in Stage 4"
-        )
+        logger.warning("MOCK: Prediction history not available in Stage 4")
 
         # Return empty list for now
         return []
 
-    async def get_prediction_by_id(
-        self, user_id: UUID, task_id: UUID
-    ) -> dict:
+    async def get_prediction_by_id(self, user_id: UUID, task_id: UUID) -> dict:
         """
         Get specific prediction details.
 
@@ -117,8 +113,6 @@ class HistoryService:
         # if not task or task.user_id != user_id:
         #     raise ValueError("Prediction not found")
 
-        logger.warning(
-            "MOCK: Prediction retrieval not available in Stage 4"
-        )
+        logger.warning("MOCK: Prediction retrieval not available in Stage 4")
 
         raise ValueError("Prediction history not available in Stage 4")

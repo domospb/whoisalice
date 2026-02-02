@@ -91,9 +91,7 @@ async def predict_audio(
     Accepts audio files (OGG, MP3, WAV, M4A).
     Deducts credits from user balance.
     """
-    logger.info(
-        f"POST /predict/audio called for user {user_id}: {audio.filename}"
-    )
+    logger.info(f"POST /predict/audio called for user {user_id}: {audio.filename}")
 
     # Read audio file
     audio_data = await audio.read()

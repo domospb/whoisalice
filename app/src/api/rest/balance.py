@@ -74,9 +74,7 @@ async def topup_balance(
     balance_service = BalanceService(session)
 
     try:
-        topup_data = await balance_service.topup_balance(
-            UUID(user_id), request.amount
-        )
+        topup_data = await balance_service.topup_balance(UUID(user_id), request.amount)
 
         logger.info(f"Balance topped up: {topup_data}")
 

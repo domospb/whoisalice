@@ -51,8 +51,7 @@ class AudioService:
         file_size = len(file_data)
         if file_size > self.max_size_bytes:
             logger.warning(
-                f"File too large: {file_size} bytes "
-                f"(max: {self.max_size_bytes})"
+                f"File too large: {file_size} bytes " f"(max: {self.max_size_bytes})"
             )
             raise ValueError(
                 f"File too large. Max size: {settings.MAX_AUDIO_SIZE_MB}MB"
@@ -68,9 +67,7 @@ class AudioService:
         async with aiofiles.open(file_path, "wb") as f:
             await f.write(file_data)
 
-        logger.info(
-            f"Audio file saved: {file_path} ({file_size} bytes)"
-        )
+        logger.info(f"Audio file saved: {file_path} ({file_size} bytes)")
 
         return str(file_path)
 
@@ -98,9 +95,7 @@ class AudioService:
 
         # Mock conversion - just copy file
         output_path = input_file.with_suffix(".ogg")
-        logger.warning(
-            f"MOCK: Copying file instead of converting: {output_path}"
-        )
+        logger.warning(f"MOCK: Copying file instead of converting: {output_path}")
 
         # TODO: Stage 5 - Implement real ffmpeg conversion
         # import asyncffmpeg

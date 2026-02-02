@@ -49,9 +49,7 @@ class TTSService:
                     await f_out.write(data)
             logger.info(f"Mock audio copied to: {output_path}")
         else:
-            logger.warning(
-                "Mock audio file not found, creating minimal placeholder"
-            )
+            logger.warning("Mock audio file not found, creating minimal placeholder")
             # Create minimal OGG file header (not a valid audio, just placeholder)
             async with aiofiles.open(output_path, "wb") as f:
                 await f.write(b"OggS")  # OGG file signature

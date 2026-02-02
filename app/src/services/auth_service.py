@@ -30,9 +30,7 @@ class AuthService:
         self.wallet_repo = WalletRepository(session)
         logger.info("AuthService initialized")
 
-    async def register_user(
-        self, username: str, email: str, password: str
-    ) -> dict:
+    async def register_user(self, username: str, email: str, password: str) -> dict:
         """
         Register a new user.
 
@@ -78,9 +76,7 @@ class AuthService:
             wallet_id=wallet.id,
         )
 
-        logger.info(
-            f"User registered successfully: {user.username} (ID: {user.id})"
-        )
+        logger.info(f"User registered successfully: {user.username} (ID: {user.id})")
 
         return {
             "user_id": str(user.id),

@@ -115,8 +115,7 @@ async def cmd_login(message: Message):
 
     if len(parts) != 3:
         await message.answer(
-            "❌ Usage: /login <username> <password>\n"
-            "Example: /login alice mypass123"
+            "❌ Usage: /login <username> <password>\n" "Example: /login alice mypass123"
         )
         return
 
@@ -126,9 +125,7 @@ async def cmd_login(message: Message):
         auth_service = AuthService(session)
 
         try:
-            login_data = await auth_service.login(
-                username=username, password=password
-            )
+            login_data = await auth_service.login(username=username, password=password)
 
             # Store session
             user_id = login_data["user"]["user_id"]
@@ -199,9 +196,7 @@ async def cmd_topup(message: Message):
     parts = message.text.split()
 
     if len(parts) != 2:
-        await message.answer(
-            "❌ Usage: /topup <amount>\n" "Example: /topup 50"
-        )
+        await message.answer("❌ Usage: /topup <amount>\n" "Example: /topup 50")
         return
 
     try:
@@ -214,9 +209,7 @@ async def cmd_topup(message: Message):
         balance_service = BalanceService(session)
 
         try:
-            topup_data = await balance_service.topup_balance(
-                UUID(user_id), amount
-            )
+            topup_data = await balance_service.topup_balance(UUID(user_id), amount)
 
             await message.answer(
                 f"✅ *Top-up Successful!*\n\n"
@@ -284,9 +277,7 @@ async def handle_text_message(message: Message):
     # Check if user is logged in
     user_id = user_sessions.get(message.from_user.id)
     if not user_id:
-        await message.answer(
-            "❌ Please login first: /login <username> <password>"
-        )
+        await message.answer("❌ Please login first: /login <username> <password>")
         return
 
     # Process text prediction
@@ -334,9 +325,7 @@ async def handle_voice_message(message: Message):
     # Check if user is logged in
     user_id = user_sessions.get(message.from_user.id)
     if not user_id:
-        await message.answer(
-            "❌ Please login first: /login <username> <password>"
-        )
+        await message.answer("❌ Please login first: /login <username> <password>")
         return
 
     # Download voice file
@@ -377,9 +366,11 @@ async def handle_voice_message(message: Message):
             await message.answer(response_text, parse_mode="Markdown")
 
             # Send audio response
-            audio_path = result["audio_url"].replace(
-                "/api/v1/predict/", ""
-            ).replace("/audio", "_result.ogg")
+            audio_path = (
+                result["audio_url"]
+                .replace("/api/v1/predict/", "")
+                .replace("/audio", "_result.ogg")
+            )
             audio_file_path = f"volumes/results/{audio_path}"
 
             try:

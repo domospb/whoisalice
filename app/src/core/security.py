@@ -69,9 +69,7 @@ def get_password_hash(password: str) -> str:
         raise
 
 
-def create_access_token(
-    data: dict, expires_delta: Optional[timedelta] = None
-) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
     Create JWT access token.
 
