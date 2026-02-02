@@ -19,7 +19,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from .core.config import settings
+from .db.config import get_database_url
 from .db.repositories.ml_model import MLModelRepository
 from .db.repositories.ml_task import MLTaskRepository, PredictionResultRepository
 from .db.repositories.user import UserRepository
@@ -288,7 +288,8 @@ async def main():
     logger.info("=" * 60)
 
     # Create database engine and session factory
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    database_url = get_database_url()
+    engine = create_async_engine(database_url, echo=False)
     session_factory = async_sessionmaker(
         engine, expire_on_commit=False, class_=None
     )
