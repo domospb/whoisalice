@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..models.user import UserModel
+from src.db.models.user import UserModel
 
 
 class UserRepository:

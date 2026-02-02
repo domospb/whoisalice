@@ -16,12 +16,12 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...core.config import settings
-from ...core.security import get_current_user_id
-from ...db.session import get_db
-from ...services.audio_service import AudioService
-from ...services.prediction_service import PredictionService
-from ..schemas.predict import TextPredictRequest, PredictionResponse
+from src.core.config import settings
+from src.core.security import get_current_user_id
+from src.db.session import get_db
+from src.services.audio_service import AudioService
+from src.services.prediction_service import PredictionService
+from src.api.schemas.predict import TextPredictRequest, PredictionResponse
 
 logger = logging.getLogger(__name__)
 

@@ -11,6 +11,12 @@ services:
     ports:
       - "5432:5432"  # Expose PostgreSQL port (host:container)
     restart: unless-stopped  # Auto-restart on failure, but not if manually stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - backend  # Connect to backend network
 
@@ -19,7 +25,7 @@ services:
     image: rabbitmq:3-management-alpine  # RabbitMQ with management UI
     container_name: whoisalice_rabbitmq
     env_file:
-      - .env
+      - .env  # RabbitMQ will use RABBITMQ_DEFAULT_USER and RABBITMQ_DEFAULT_PASS
     volumes:
       # Mount named volume to persist RabbitMQ data
       - rabbitmq_data:/var/lib/rabbitmq
@@ -27,6 +33,12 @@ services:
       - "5672:5672"   # AMQP protocol port
       - "15672:15672" # Management web UI (http://localhost:15672)
     restart: on-failure  # Restart only on failure
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - backend
 
@@ -45,9 +57,10 @@ services:
       - ./volumes/audio_uploads:/app/volumes/audio_uploads
       - ./volumes/audio_results:/app/volumes/audio_results
     depends_on:
-      # Wait for these services to start first (not waiting for "ready" state)
-      - database
-      - rabbitmq
+      database:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       # Check if app is healthy by calling /health endpoint
@@ -75,8 +88,10 @@ services:
       - ./volumes/audio_uploads:/app/volumes/audio_uploads
       - ./volumes/audio_results:/app/volumes/audio_results
     depends_on:
-      - database
-      - rabbitmq
+      database:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - backend

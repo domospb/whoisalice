@@ -8,9 +8,9 @@ Retrieves historical data:
 import logging
 from uuid import UUID
 
-from ..db.repositories.transaction import TransactionRepository
-from ..db.repositories.ml_task import MLTaskRepository
-from ..db.repositories.user import UserRepository
+from src.db.repositories.transaction import TransactionRepository
+from src.db.repositories.ml_task import MLTaskRepository
+from src.db.repositories.user import UserRepository
 
 logger = logging.getLogger(__name__)
 

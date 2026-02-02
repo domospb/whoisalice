@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..models.ml_task import MLTaskModel, PredictionResultModel
+from src.db.models.ml_task import MLTaskModel, PredictionResultModel
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +163,21 @@ class MLTaskRepository:
         logger.info(f"Task {task_id} updated to status: {status}")
 
         return task
+
+    async def fail(
+        self, task_id: UUID, error_message: str
+    ) -> MLTaskModel | None:
+        """
+        Mark task as failed.
+
+        Args:
+            task_id: Task UUID
+            error_message: Error message
+
+        Returns:
+            Updated task or None if not found
+        """
+        return await self.update_status(task_id, "failed", error_message)
 
     async def complete_task(
         self, task_id: UUID, result_id: UUID

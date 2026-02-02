@@ -11,10 +11,10 @@ import logging
 from typing import Optional
 from uuid import UUID
 
-from ..db.repositories.ml_model import MLModelRepository
-from ..db.repositories.ml_task import MLTaskRepository
-from ..db.repositories.user import UserRepository
-from ..queue.publisher import TaskPublisher
+from src.db.repositories.ml_model import MLModelRepository
+from src.db.repositories.ml_task import MLTaskRepository
+from src.db.repositories.user import UserRepository
+from src.queue.publisher import TaskPublisher
 
 logger = logging.getLogger(__name__)
 

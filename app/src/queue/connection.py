@@ -4,6 +4,7 @@ RabbitMQ connection management.
 Handles connection to RabbitMQ broker.
 """
 import logging
+import os
 from typing import Optional
 
 import aio_pika
@@ -18,28 +19,33 @@ class RabbitMQConnection:
 
     def __init__(
         self,
-        host: str = "rabbitmq",
-        port: int = 5672,
-        username: str = "guest",
-        password: str = "changeme_strong_password",
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
     ):
         """
         Initialize RabbitMQ connection parameters.
 
+        Reads from environment variables if not provided.
+
         Args:
-            host: RabbitMQ host
-            port: RabbitMQ port
-            username: Username
-            password: Password
+            host: RabbitMQ host (defaults to RABBITMQ_HOST env var or 'rabbitmq')
+            port: RabbitMQ port (defaults to RABBITMQ_PORT env var or 5672)
+            username: Username (defaults to RABBITMQ_DEFAULT_USER env var or 'guest')
+            password: Password (defaults to RABBITMQ_DEFAULT_PASS env var or 'guest')
         """
-        self.host = host
-        self.port = port
-        self.username = username
-        self.password = password
+        self.host = host or os.getenv("RABBITMQ_HOST", "rabbitmq")
+        self.port = port or int(os.getenv("RABBITMQ_PORT", "5672"))
+        self.username = username or os.getenv("RABBITMQ_DEFAULT_USER", "guest")
+        self.password = password or os.getenv("RABBITMQ_DEFAULT_PASS", "guest")
         self.connection: Optional[AbstractRobustConnection] = None
         self.channel: Optional[Channel] = None
 
-        logger.info(f"RabbitMQ connection configured: {host}:{port}")
+        logger.info(
+            f"RabbitMQ connection configured: {self.host}:{self.port} "
+            f"(user: {self.username})"
+        )
 
     async def connect(self) -> AbstractRobustConnection:
         """

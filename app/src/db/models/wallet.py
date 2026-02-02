@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import DECIMAL, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..session import Base
+from src.db.session import Base
 
 
 class WalletModel(Base):

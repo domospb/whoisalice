@@ -7,7 +7,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from ...core.config import settings
+from src.core.config import settings
 from .handlers import router
 
 logger = logging.getLogger(__name__)

@@ -17,7 +17,11 @@ import os
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    async_sessionmaker,
+    AsyncSession,
+)
 
 from .db.config import get_database_url
 from .db.repositories.ml_model import MLModelRepository
@@ -64,18 +68,19 @@ class MLWorker:
 
         logger.info(f"MLWorker initialized: {WORKER_ID}")
 
-    async def process_task(self, message_data: dict):
+    async def process_task(self, message_data: dict, worker_id: str):
         """
         Process a single ML task.
 
         Args:
             message_data: Task data from queue
+            worker_id: Worker identifier
 
         Returns:
             bool: True if successful, False otherwise
         """
         task_id = message_data.get("task_id")
-        logger.info(f"[{WORKER_ID}] Processing task: {task_id}")
+        logger.info(f"[{worker_id}] Processing task: {task_id}")
 
         try:
             # Create database session
@@ -99,7 +104,7 @@ class MLWorker:
                 await session.commit()
 
                 logger.info(
-                    f"[{WORKER_ID}] Task {task_id} status: pending -> processing"
+                    f"[{worker_id}] Task {task_id} status: pending -> processing"
                 )
 
                 # Get user and model
@@ -121,11 +126,11 @@ class MLWorker:
                 # Process based on input type
                 if task.input_type == "text":
                     result_data = await self._process_text(
-                        task.input_data, model.name
+                        task.input_data, model.name, worker_id
                     )
                 elif task.input_type == "audio":
                     result_data = await self._process_audio(
-                        task.input_data, model.name
+                        task.input_data, model.name, worker_id
                     )
                 else:
                     raise ValueError(f"Unsupported input type: {task.input_type}")
@@ -135,15 +140,14 @@ class MLWorker:
                 invalid_count = 0 if result_data else 1
 
                 # Save prediction result
-                await result_repo.create(
-                    ml_task_id=task.id,
+                prediction_result = await result_repo.create(
                     prediction_data=json.dumps(result_data),
                     valid_data=valid_count,
                     invalid_data=invalid_count,
                 )
 
                 logger.info(
-                    f"[{WORKER_ID}] Prediction result saved for task {task_id}"
+                    f"[{worker_id}] Prediction result saved for task {task_id}"
                 )
 
                 # Deduct balance
@@ -154,29 +158,29 @@ class MLWorker:
                 await transaction_repo.create(
                     amount=cost,
                     transaction_type="debit",
-                    description=f"ML prediction: {model.name} (worker: {WORKER_ID})",
+                    description=f"ML prediction: {model.name} (worker: {worker_id})",
                     wallet_id=user.wallet.id,
                     user_id=user.id,
                 )
 
                 logger.info(
-                    f"[{WORKER_ID}] Balance deducted: ${cost} "
+                    f"[{worker_id}] Balance deducted: ${cost} "
                     f"({current_balance} -> {new_balance})"
                 )
 
-                # Mark task as completed
-                await mltask_repo.complete(task.id)
+                # Mark task as completed with result
+                await mltask_repo.complete_task(task.id, prediction_result.id)
                 await session.commit()
 
                 logger.info(
-                    f"[{WORKER_ID}] Task {task_id} completed successfully "
+                    f"[{worker_id}] Task {task_id} completed successfully "
                     f"(valid: {valid_count}, invalid: {invalid_count})"
                 )
 
                 return True
 
         except Exception as e:
-            logger.error(f"[{WORKER_ID}] Task {task_id} failed: {e}", exc_info=True)
+            logger.error(f"[{worker_id}] Task {task_id} failed: {e}", exc_info=True)
 
             # Update task status to failed
             try:
@@ -184,54 +188,60 @@ class MLWorker:
                     mltask_repo = MLTaskRepository(session)
                     await mltask_repo.fail(task_id, str(e))
                     await session.commit()
-                    logger.info(f"[{WORKER_ID}] Task {task_id} marked as failed")
+                    logger.info(f"[{worker_id}] Task {task_id} marked as failed")
             except Exception as update_error:
                 logger.error(f"Failed to update task status: {update_error}")
 
             return False
 
-    async def _process_text(self, input_text: str, model_name: str) -> dict:
+    async def _process_text(
+        self, input_text: str, model_name: str, worker_id: str
+    ) -> dict:
         """
         Process text input.
 
         Args:
             input_text: Text input
             model_name: ML model name
+            worker_id: Worker identifier
 
         Returns:
             dict with prediction result
         """
-        logger.debug(f"[{WORKER_ID}] Processing text: {input_text[:50]}...")
+        logger.debug(f"[{worker_id}] Processing text: {input_text[:50]}...")
 
         # Mock: Generate response
         response_text = (
             f"Mock response to: '{input_text[:50]}...' "
-            f"(Model: {model_name}, Worker: {WORKER_ID})"
+            f"(Model: {model_name}, Worker: {worker_id})"
         )
 
         # Generate audio (TTS mock)
         # Note: Audio file will be saved with task_id in the service
-        logger.info(f"[{WORKER_ID}] Generating TTS audio (mock)")
+        logger.info(f"[{worker_id}] Generating TTS audio (mock)")
 
         return {
             "input": input_text,
             "output": response_text,
             "model": model_name,
-            "worker": WORKER_ID,
+            "worker": worker_id,
         }
 
-    async def _process_audio(self, audio_path: str, model_name: str) -> dict:
+    async def _process_audio(
+        self, audio_path: str, model_name: str, worker_id: str
+    ) -> dict:
         """
         Process audio input.
 
         Args:
             audio_path: Path to audio file
             model_name: ML model name
+            worker_id: Worker identifier
 
         Returns:
             dict with prediction result
         """
-        logger.debug(f"[{WORKER_ID}] Processing audio: {audio_path}")
+        logger.debug(f"[{worker_id}] Processing audio: {audio_path}")
 
         # Validate audio file exists
         if not Path(audio_path).exists():
@@ -239,22 +249,22 @@ class MLWorker:
 
         # STT: Transcribe audio (mock)
         transcription = await self.stt_service.transcribe(audio_path)
-        logger.info(f"[{WORKER_ID}] Transcription: {transcription[:50]}...")
+        logger.info(f"[{worker_id}] Transcription: {transcription[:50]}...")
 
         # Mock: Generate response
         response_text = (
             f"Mock response to audio: '{transcription[:50]}...' "
-            f"(Model: {model_name}, Worker: {WORKER_ID})"
+            f"(Model: {model_name}, Worker: {worker_id})"
         )
 
         # TTS: Generate audio response (mock)
-        logger.info(f"[{WORKER_ID}] Generating TTS audio (mock)")
+        logger.info(f"[{worker_id}] Generating TTS audio (mock)")
 
         return {
             "transcription": transcription,
             "output": response_text,
             "model": model_name,
-            "worker": WORKER_ID,
+            "worker": worker_id,
         }
 
     async def start(self):
@@ -265,14 +275,13 @@ class MLWorker:
         await self.rabbitmq_connection.connect()
         channel = await self.rabbitmq_connection.get_channel()
 
-        # Create consumer
-        self.consumer = TaskConsumer(channel)
-        await self.consumer.setup_queue()
+        # Create consumer with callback
+        self.consumer = TaskConsumer(channel, self.process_task, WORKER_ID)
 
         logger.info(f"[{WORKER_ID}] Worker ready, waiting for tasks...")
 
         # Start consuming
-        await self.consumer.start_consuming(self.process_task)
+        await self.consumer.start_consuming()
 
     async def stop(self):
         """Stop worker gracefully."""
@@ -291,7 +300,7 @@ async def main():
     database_url = get_database_url()
     engine = create_async_engine(database_url, echo=False)
     session_factory = async_sessionmaker(
-        engine, expire_on_commit=False, class_=None
+        engine, expire_on_commit=False, class_=AsyncSession
     )
 
     # Get RabbitMQ connection
@@ -303,6 +312,11 @@ async def main():
     try:
         # Start worker
         await worker.start()
+
+        # Keep worker running indefinitely
+        logger.info(f"[{WORKER_ID}] Worker running, press Ctrl+C to stop")
+        await asyncio.Event().wait()  # Wait forever until interrupted
+
     except KeyboardInterrupt:
         logger.info("Received interrupt signal")
     except Exception as e:
