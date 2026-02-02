@@ -94,9 +94,7 @@ class TaskConsumer:
                 # Message will be rejected (not requeued)
 
             except Exception as e:
-                logger.error(
-                    f"Worker {self.worker_id}: Message processing error: {e}"
-                )
+                logger.error(f"Worker {self.worker_id}: Message processing error: {e}")
                 # Message will be rejected (not requeued)
                 raise
 

@@ -164,9 +164,7 @@ class MLTaskRepository:
 
         return task
 
-    async def fail(
-        self, task_id: UUID, error_message: str
-    ) -> MLTaskModel | None:
+    async def fail(self, task_id: UUID, error_message: str) -> MLTaskModel | None:
         """
         Mark task as failed.
 
@@ -179,9 +177,7 @@ class MLTaskRepository:
         """
         return await self.update_status(task_id, "failed", error_message)
 
-    async def complete_task(
-        self, task_id: UUID, result_id: UUID
-    ) -> MLTaskModel | None:
+    async def complete_task(self, task_id: UUID, result_id: UUID) -> MLTaskModel | None:
         """
         Mark task as completed with result.
 
@@ -270,9 +266,7 @@ class PredictionResultRepository:
         logger.debug(f"Getting prediction result by ID: {result_id}")
 
         result = await self.session.execute(
-            select(PredictionResultModel).where(
-                PredictionResultModel.id == result_id
-            )
+            select(PredictionResultModel).where(PredictionResultModel.id == result_id)
         )
 
         prediction_result = result.scalar_one_or_none()

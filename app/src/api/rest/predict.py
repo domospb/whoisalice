@@ -180,8 +180,7 @@ async def get_prediction(
         )
 
         logger.info(
-            f"Prediction result retrieved: {task_id}, "
-            f"status={result['status']}"
+            f"Prediction result retrieved: {task_id}, " f"status={result['status']}"
         )
 
         return result

@@ -124,9 +124,7 @@ class PredictionService:
                 )
                 raise ValueError("Failed to queue prediction task")
         else:
-            logger.warning(
-                "TaskPublisher not configured, task created but not queued"
-            )
+            logger.warning("TaskPublisher not configured, task created but not queued")
 
         return {
             "task_id": str(task.id),
@@ -232,9 +230,7 @@ class PredictionService:
                 )
                 raise ValueError("Failed to queue prediction task")
         else:
-            logger.warning(
-                "TaskPublisher not configured, task created but not queued"
-            )
+            logger.warning("TaskPublisher not configured, task created but not queued")
 
         return {
             "task_id": str(task.id),

@@ -146,9 +146,7 @@ class MLWorker:
                     invalid_data=invalid_count,
                 )
 
-                logger.info(
-                    f"[{worker_id}] Prediction result saved for task {task_id}"
-                )
+                logger.info(f"[{worker_id}] Prediction result saved for task {task_id}")
 
                 # Deduct balance
                 new_balance = current_balance - cost

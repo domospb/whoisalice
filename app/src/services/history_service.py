@@ -158,9 +158,7 @@ class HistoryService:
             "completed_at": task.completed_at.isoformat()
             if task.completed_at
             else None,
-            "cost": float(task.model.cost_per_prediction)
-            if task.model
-            else 0.0,
+            "cost": float(task.model.cost_per_prediction) if task.model else 0.0,
         }
 
         if task.result:
