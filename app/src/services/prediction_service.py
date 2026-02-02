@@ -4,18 +4,17 @@ Prediction service.
 Coordinates ML prediction workflow:
 - Text predictions
 - Audio predictions
-- Balance deduction
-- Task creation and updates
+- Task creation
+- Queue publishing (Stage 5: async processing)
 """
 import logging
-from pathlib import Path
-from uuid import UUID, uuid4
+from typing import Optional
+from uuid import UUID
 
 from ..db.repositories.ml_model import MLModelRepository
+from ..db.repositories.ml_task import MLTaskRepository
 from ..db.repositories.user import UserRepository
-from ..db.repositories.wallet import WalletRepository
-from ..db.repositories.transaction import TransactionRepository
-from ..core.config import settings
+from ..queue.publisher import TaskPublisher
 
 logger = logging.getLogger(__name__)
 
@@ -23,26 +22,38 @@ logger = logging.getLogger(__name__)
 class PredictionService:
     """Prediction orchestration service."""
 
-    def __init__(self, session, audio_service, stt_service, tts_service):
-        """Initialize with session and ML services."""
+    def __init__(
+        self,
+        session,
+        audio_service,
+        task_publisher: Optional[TaskPublisher] = None,
+    ):
+        """
+        Initialize with session and services.
+
+        Args:
+            session: Database session
+            audio_service: Audio file handling service
+            task_publisher: RabbitMQ publisher (optional for testing)
+        """
         self.session = session
         self.audio_service = audio_service
-        self.stt_service = stt_service
-        self.tts_service = tts_service
+        self.task_publisher = task_publisher
 
         # Repositories
         self.user_repo = UserRepository(session)
         self.model_repo = MLModelRepository(session)
-        self.wallet_repo = WalletRepository(session)
-        self.transaction_repo = TransactionRepository(session)
+        self.mltask_repo = MLTaskRepository(session)
 
-        logger.info("PredictionService initialized")
+        logger.info("PredictionService initialized (Stage 5: async mode)")
 
     async def process_text_prediction(
         self, user_id: UUID, input_text: str, model_name: str = "GPT-4 TTS"
     ) -> dict:
         """
-        Process text-based prediction.
+        Create text prediction task and publish to queue.
+
+        Stage 5: Asynchronous processing via RabbitMQ workers.
 
         Args:
             user_id: User UUID
@@ -50,13 +61,14 @@ class PredictionService:
             model_name: ML model to use
 
         Returns:
-            dict with task_id, status, result_text, audio_url, cost
+            dict with task_id, status="pending", cost
 
         Raises:
             ValueError: If model not found or insufficient balance
         """
         logger.info(
-            f"Processing text prediction for user {user_id}: {input_text[:50]}..."
+            f"Creating text prediction task for user {user_id}: "
+            f"{input_text[:50]}..."
         )
 
         # Get ML model
@@ -67,7 +79,7 @@ class PredictionService:
 
         cost = float(model.cost_per_prediction)
 
-        # Check user balance
+        # Check user balance (but don't deduct yet - workers will do it)
         user = await self.user_repo.get_by_id(user_id)
         if not user or not user.wallet:
             raise ValueError("User or wallet not found")
@@ -80,49 +92,48 @@ class PredictionService:
                 f"Available: ${current_balance}"
             )
 
-        # Create task ID
-        task_id = uuid4()
-
-        # Mock: Generate response text
-        response_text = (
-            f"Mock response to: '{input_text[:30]}...' "
-            f"(Model: {model_name}, Task: {task_id})"
-        )
-
-        logger.debug(f"Mock response generated: {response_text[:50]}...")
-
-        # Generate audio response
-        audio_filename = f"{task_id}_result.ogg"
-        audio_path = Path(settings.AUDIO_RESULTS_DIR) / audio_filename
-        await self.tts_service.synthesize(response_text, str(audio_path))
-
-        # Deduct credits
-        new_balance = current_balance - cost
-        await self.wallet_repo.update_balance(user.wallet.id, new_balance)
-
-        # Create transaction (for audit trail)
-        await self.transaction_repo.create(
-            amount=cost,
-            transaction_type="debit",
-            description=f"ML prediction: {model_name}",
-            wallet_id=user.wallet.id,
+        # Create MLTask in database (status="pending")
+        task = await self.mltask_repo.create(
             user_id=user_id,
+            model_id=model.id,
+            input_data=input_text,
+            input_type="text",
+            output_type="audio",
+            status="pending",
         )
 
-        logger.info(
-            f"Text prediction processed: Task {task_id} | "
-            f"Cost: ${cost} | Balance: {current_balance} -> {new_balance}"
-        )
+        logger.info(f"MLTask created: {task.id} (status=pending, cost=${cost})")
 
-        # TODO: Stage 5 - Create MLTask in database and update status
+        # Publish to RabbitMQ queue
+        if self.task_publisher:
+            try:
+                await self.task_publisher.publish_task(
+                    task_id=task.id,
+                    user_id=user_id,
+                    model_id=model.id,
+                    input_data=input_text,
+                    input_type="text",
+                    output_type="audio",
+                )
+                logger.info(f"Task {task.id} published to queue")
+            except Exception as e:
+                logger.error(f"Failed to publish task: {e}")
+                # Update task status to failed
+                await self.mltask_repo.update_status(
+                    task.id, "failed", error_message=f"Queue publish error: {e}"
+                )
+                raise ValueError("Failed to queue prediction task")
+        else:
+            logger.warning(
+                "TaskPublisher not configured, task created but not queued"
+            )
 
         return {
-            "task_id": str(task_id),
-            "status": "completed",
+            "task_id": str(task.id),
+            "status": "pending",
             "input_text": input_text,
-            "result_text": response_text,
-            "audio_url": f"/api/v1/predict/{task_id}/audio",
             "cost": cost,
+            "message": "Task queued for processing. Check status later.",
         }
 
     async def process_audio_prediction(
@@ -133,7 +144,9 @@ class PredictionService:
         model_name: str = "Whisper STT",
     ) -> dict:
         """
-        Process audio-based prediction.
+        Create audio prediction task and publish to queue.
+
+        Stage 5: Asynchronous processing via RabbitMQ workers.
 
         Args:
             user_id: User UUID
@@ -142,12 +155,12 @@ class PredictionService:
             model_name: ML model to use
 
         Returns:
-            dict with task_id, status, transcription, result_text, audio_url, cost
+            dict with task_id, status="pending", audio_path, cost
 
         Raises:
             ValueError: If model not found or insufficient balance
         """
-        logger.info(f"Processing audio prediction for user {user_id}: {filename}")
+        logger.info(f"Creating audio prediction task for user {user_id}: {filename}")
 
         # Get ML model
         model = await self.model_repo.get_by_name(model_name)
@@ -157,7 +170,7 @@ class PredictionService:
 
         cost = float(model.cost_per_prediction)
 
-        # Check user balance
+        # Check user balance (but don't deduct yet - workers will do it)
         user = await self.user_repo.get_by_id(user_id)
         if not user or not user.wallet:
             raise ValueError("User or wallet not found")
@@ -170,88 +183,121 @@ class PredictionService:
                 f"Available: ${current_balance}"
             )
 
-        # Create task ID
-        task_id = uuid4()
+        # Create MLTask in database first (to get task_id)
+        task = await self.mltask_repo.create(
+            user_id=user_id,
+            model_id=model.id,
+            input_data="",  # Will be updated with file path
+            input_type="audio",
+            output_type="audio",
+            status="pending",
+        )
 
-        # Save audio file
+        logger.info(f"MLTask created: {task.id} (status=pending, cost=${cost})")
+
+        # Save audio file with task_id
         audio_path = await self.audio_service.save_audio_file(
-            audio_file, filename, task_id
+            audio_file, filename, task.id
         )
 
         # Validate audio
         is_valid = await self.audio_service.validate_audio(audio_path)
         if not is_valid:
             logger.error(f"Invalid audio file: {audio_path}")
+            await self.mltask_repo.update_status(
+                task.id, "failed", error_message="Invalid audio file"
+            )
             raise ValueError("Invalid audio file")
 
-        # STT: Transcribe audio
-        transcription = await self.stt_service.transcribe(audio_path)
+        # Update task with audio file path
+        task.input_data = audio_path
+        await self.session.commit()
 
-        logger.debug(f"Transcription: {transcription}")
-
-        # Mock: Process transcription and generate response
-        response_text = (
-            f"Mock response to audio transcription: '{transcription[:30]}...' "
-            f"(Model: {model_name}, Task: {task_id})"
-        )
-
-        # TTS: Convert response to audio
-        result_audio_filename = f"{task_id}_result.ogg"
-        result_audio_path = Path(settings.AUDIO_RESULTS_DIR) / result_audio_filename
-        await self.tts_service.synthesize(response_text, str(result_audio_path))
-
-        # Deduct credits
-        new_balance = current_balance - cost
-        await self.wallet_repo.update_balance(user.wallet.id, new_balance)
-
-        # Create transaction (for audit trail)
-        await self.transaction_repo.create(
-            amount=cost,
-            transaction_type="debit",
-            description=f"ML prediction: {model_name} (audio)",
-            wallet_id=user.wallet.id,
-            user_id=user_id,
-        )
-
-        logger.info(
-            f"Audio prediction processed: Task {task_id} | "
-            f"Cost: ${cost} | Balance: {current_balance} -> {new_balance}"
-        )
-
-        # TODO: Stage 5 - Create MLTask in database and update status
+        # Publish to RabbitMQ queue
+        if self.task_publisher:
+            try:
+                await self.task_publisher.publish_task(
+                    task_id=task.id,
+                    user_id=user_id,
+                    model_id=model.id,
+                    input_data=audio_path,
+                    input_type="audio",
+                    output_type="audio",
+                )
+                logger.info(f"Task {task.id} published to queue")
+            except Exception as e:
+                logger.error(f"Failed to publish task: {e}")
+                await self.mltask_repo.update_status(
+                    task.id, "failed", error_message=f"Queue publish error: {e}"
+                )
+                raise ValueError("Failed to queue prediction task")
+        else:
+            logger.warning(
+                "TaskPublisher not configured, task created but not queued"
+            )
 
         return {
-            "task_id": str(task_id),
-            "status": "completed",
-            "transcription": transcription,
-            "result_text": response_text,
-            "audio_url": f"/api/v1/predict/{task_id}/audio",
+            "task_id": str(task.id),
+            "status": "pending",
+            "audio_path": audio_path,
             "cost": cost,
+            "message": "Task queued for processing. Check status later.",
         }
 
-    async def get_prediction_result(self, task_id: UUID) -> dict:
+    async def get_prediction_result(self, task_id: UUID, user_id: UUID) -> dict:
         """
         Get prediction result by task ID.
 
-        NOTE: Mock implementation for Stage 4.
-        Real implementation will query MLTask from database in Stage 5.
+        Stage 5: Query MLTask from database.
 
         Args:
             task_id: Task UUID
+            user_id: User UUID (for ownership verification)
 
         Returns:
             dict with task details
 
         Raises:
-            ValueError: If task not found
+            ValueError: If task not found or access denied
         """
         logger.info(f"Getting prediction result for task: {task_id}")
 
-        # TODO: Stage 5 - Implement real task retrieval from database
-        # task = await self.mltask_repo.get_by_id(task_id)
+        task = await self.mltask_repo.get_by_id(task_id)
 
-        logger.warning("MOCK: Prediction result retrieval not fully implemented")
-        raise ValueError(
-            "Prediction history not available in Stage 4. "
-            "Use the prediction response directly."
-        )
+        if not task:
+            logger.warning(f"Task not found: {task_id}")
+            raise ValueError("Task not found")
+
+        # Verify ownership
+        if task.user_id != user_id:
+            logger.warning(
+                f"Access denied: Task {task_id} does not belong to user {user_id}"
+            )
+            raise ValueError("Access denied")
+
+        logger.info(f"Task found: {task_id}, status: {task.status}")
+
+        # Build response
+        result = {
+            "task_id": str(task.id),
+            "status": task.status,
+            "input_type": task.input_type,
+            "output_type": task.output_type,
+            "created_at": task.created_at.isoformat(),
+            "completed_at": task.completed_at.isoformat()
+            if task.completed_at
+            else None,
+        }
+
+        if task.result:
+            result["prediction_data"] = task.result.prediction_data
+            result["valid_count"] = task.result.valid_data
+            result["invalid_count"] = task.result.invalid_data
+
+        if task.error_message:
+            result["error_message"] = task.error_message
+
+        if task.status == "completed":
+            result["audio_url"] = f"/api/v1/predict/{task.id}/audio"
+
+        return result
