@@ -5,12 +5,14 @@ AI Voice Assistant API with TTS and STT operations.
 
 Stage 5: Integrated with RabbitMQ for asynchronous ML task processing.
 """
+import asyncio
 import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.rest import auth, balance, predict, history
+from .api.telegram.bot import setup_bot, start_bot
 from .core.config import settings
 from .queue.connection import get_rabbitmq_connection
 from .queue.publisher import TaskPublisher
@@ -100,11 +102,40 @@ async def startup_event():
         app.state.rabbitmq_connection = None
         app.state.task_publisher = None
 
+    # Start Telegram bot in background
+    try:
+        logger.info("Starting Telegram bot...")
+        bot_instance, dp_instance = setup_bot()
+        if bot_instance and dp_instance:
+            # Pass task_publisher to bot for handlers
+            if app.state.task_publisher:
+                bot_instance.task_publisher = app.state.task_publisher
+                logger.info("Task publisher attached to Telegram bot")
+
+            # Run bot in background task
+            asyncio.create_task(start_bot())
+            logger.info("Telegram bot started successfully")
+        else:
+            logger.warning("Telegram bot not started (token not configured)")
+    except Exception as e:
+        logger.error(f"Failed to start Telegram bot: {e}")
+        logger.warning("Application will run without Telegram bot")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Run on application shutdown."""
     logger.info(f"Shutting down {settings.PROJECT_NAME}")
+
+    # Close Telegram bot
+    try:
+        from .api.telegram.bot import bot
+
+        if bot:
+            await bot.session.close()
+            logger.info("Telegram bot closed")
+    except Exception as e:
+        logger.debug(f"Telegram bot shutdown: {e}")
 
     # Close RabbitMQ connection
     if hasattr(app.state, "rabbitmq_connection") and app.state.rabbitmq_connection:

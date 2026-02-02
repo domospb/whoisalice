@@ -18,14 +18,12 @@ from uuid import UUID
 
 from aiogram import Router, F
 from aiogram.filters import Command
-from aiogram.types import Message, FSInputFile
+from aiogram.types import Message
 
 from src.db.session import AsyncSessionLocal
 from src.services.auth_service import AuthService
 from src.services.balance_service import BalanceService
 from src.services.audio_service import AudioService
-from src.services.stt_service import STTService
-from src.services.tts_service import TTSService
 from src.services.prediction_service import PredictionService
 from src.services.history_service import HistoryService
 
@@ -53,10 +51,12 @@ async def cmd_start(message: Message):
         "/login <username> <password> - Login\n"
         "/balance - Check balance\n"
         "/topup <amount> - Top-up balance\n"
-        "/history - View transaction history\n\n"
+        "/history - View transaction history\n"
+        "/status <task_id> - Check task status\n\n"
         "*Usage:*\n"
         "• Send text messages for text predictions\n"
-        "• Send voice messages for audio predictions\n\n"
+        "• Send voice messages for audio predictions\n"
+        "• Tasks are processed asynchronously by workers\n\n"
         "_Note: You must login first_"
     )
 
@@ -269,9 +269,75 @@ async def cmd_history(message: Message):
             await message.answer("❌ Failed to get history. Please try again.")
 
 
-@router.message(F.text)
+@router.message(Command("status"))
+async def cmd_status(message: Message):
+    """Handle /status command - Check ML task status."""
+    logger.info(f"User {message.from_user.id} - /status")
+
+    # Check if user is logged in
+    user_id = user_sessions.get(message.from_user.id)
+    if not user_id:
+        await message.answer("❌ Please login first: /login <username> <password>")
+        return
+
+    # Parse command: /status task_id
+    parts = message.text.split()
+
+    if len(parts) != 2:
+        await message.answer(
+            "❌ Usage: /status <task_id>\n"
+            "Example: /status 123e4567-e89b-12d3-a456-426614174000"
+        )
+        return
+
+    task_id = parts[1]
+
+    async with AsyncSessionLocal() as session:
+        prediction_service = PredictionService(session, None, None)
+
+        try:
+            result = await prediction_service.get_prediction_result(
+                UUID(user_id), UUID(task_id)
+            )
+
+            status_emoji = {
+                "pending": "⏳",
+                "processing": "🔄",
+                "completed": "✅",
+                "failed": "❌",
+            }
+
+            emoji = status_emoji.get(result["status"], "❓")
+
+            response_text = (
+                f"{emoji} *Task Status*\n\n"
+                f"Task ID: `{result['task_id']}`\n"
+                f"Status: *{result['status'].upper()}*\n"
+                f"Model: {result['model_name']}\n"
+            )
+
+            if result["status"] == "completed" and result.get("result_text"):
+                response_text += f"\nResult: {result['result_text']}\n"
+                if result.get("transcription"):
+                    response_text += f"Transcription: _{result['transcription']}_\n"
+                response_text += f"Cost: ${result.get('cost', 0):.2f}"
+
+            elif result["status"] == "failed" and result.get("error_message"):
+                response_text += f"\nError: {result['error_message']}"
+
+            await message.answer(response_text, parse_mode="Markdown")
+
+        except ValueError as e:
+            logger.warning(f"Status check failed: {e}")
+            await message.answer(f"❌ {e}")
+        except Exception as e:
+            logger.error(f"Status check error: {e}")
+            await message.answer("❌ Failed to check status. Please try again.")
+
+
+@router.message(F.text & ~F.text.startswith("/"))
 async def handle_text_message(message: Message):
-    """Handle text messages - Text prediction."""
+    """Handle text messages - Text prediction (async via RabbitMQ)."""
     logger.info(f"User {message.from_user.id} sent text: {message.text[:50]}")
 
     # Check if user is logged in
@@ -280,17 +346,25 @@ async def handle_text_message(message: Message):
         await message.answer("❌ Please login first: /login <username> <password>")
         return
 
-    # Process text prediction
+    # Get task publisher from app state
+    from .bot import bot
+
+    if not hasattr(bot, "task_publisher") or not bot.task_publisher:
+        await message.answer(
+            "❌ Service temporarily unavailable. Please try again later."
+        )
+        logger.error("Task publisher not available")
+        return
+
+    # Process text prediction (async)
     async with AsyncSessionLocal() as session:
         audio_service = AudioService()
-        stt_service = STTService()
-        tts_service = TTSService()
         prediction_service = PredictionService(
-            session, audio_service, stt_service, tts_service
+            session, audio_service, bot.task_publisher
         )
 
         try:
-            await message.answer("🤔 Processing your message...")
+            await message.answer("⏳ Queuing your task for processing...")
 
             result = await prediction_service.process_text_prediction(
                 user_id=UUID(user_id),
@@ -299,15 +373,15 @@ async def handle_text_message(message: Message):
             )
 
             response_text = (
-                f"✅ *Prediction Complete*\n\n"
-                f"Result: {result['result_text']}\n\n"
-                f"Cost: ${result['cost']:.2f}\n"
-                f"Task ID: `{result['task_id']}`"
+                f"✅ *Task Queued Successfully*\n\n"
+                f"Your text prediction task has been queued.\n"
+                f"Workers are processing it now.\n\n"
+                f"Task ID: `{result['task_id']}`\n"
+                f"Status: {result['status']}\n\n"
+                f"_Check status with: /status {result['task_id']}_"
             )
 
             await message.answer(response_text, parse_mode="Markdown")
-
-            # TODO: Send audio response when TTS is real
 
         except ValueError as e:
             logger.warning(f"Text prediction failed: {e}")
@@ -319,13 +393,23 @@ async def handle_text_message(message: Message):
 
 @router.message(F.voice)
 async def handle_voice_message(message: Message):
-    """Handle voice messages - Audio prediction."""
+    """Handle voice messages - Audio prediction (async via RabbitMQ)."""
     logger.info(f"User {message.from_user.id} sent voice message")
 
     # Check if user is logged in
     user_id = user_sessions.get(message.from_user.id)
     if not user_id:
         await message.answer("❌ Please login first: /login <username> <password>")
+        return
+
+    # Get task publisher from app state
+    from .bot import bot
+
+    if not hasattr(bot, "task_publisher") or not bot.task_publisher:
+        await message.answer(
+            "❌ Service temporarily unavailable. Please try again later."
+        )
+        logger.error("Task publisher not available")
         return
 
     # Download voice file
@@ -336,17 +420,15 @@ async def handle_voice_message(message: Message):
     file_data = await message.bot.download_file(file_info.file_path)
     audio_bytes = file_data.read()
 
-    # Process audio prediction
+    # Process audio prediction (async)
     async with AsyncSessionLocal() as session:
         audio_service = AudioService()
-        stt_service = STTService()
-        tts_service = TTSService()
         prediction_service = PredictionService(
-            session, audio_service, stt_service, tts_service
+            session, audio_service, bot.task_publisher
         )
 
         try:
-            await message.answer("🎙️ Processing your voice message...")
+            await message.answer("⏳ Queuing your voice message for processing...")
 
             result = await prediction_service.process_audio_prediction(
                 user_id=UUID(user_id),
@@ -356,29 +438,15 @@ async def handle_voice_message(message: Message):
             )
 
             response_text = (
-                f"✅ *Audio Prediction Complete*\n\n"
-                f"Transcription: _{result.get('transcription', 'N/A')}_\n\n"
-                f"Result: {result['result_text']}\n\n"
-                f"Cost: ${result['cost']:.2f}\n"
-                f"Task ID: `{result['task_id']}`"
+                f"✅ *Task Queued Successfully*\n\n"
+                f"Your audio prediction task has been queued.\n"
+                f"Workers are processing it now.\n\n"
+                f"Task ID: `{result['task_id']}`\n"
+                f"Status: {result['status']}\n\n"
+                f"_Check status with: /status {result['task_id']}_"
             )
 
             await message.answer(response_text, parse_mode="Markdown")
-
-            # Send audio response
-            audio_path = (
-                result["audio_url"]
-                .replace("/api/v1/predict/", "")
-                .replace("/audio", "_result.ogg")
-            )
-            audio_file_path = f"volumes/results/{audio_path}"
-
-            try:
-                audio_file = FSInputFile(audio_file_path)
-                await message.answer_voice(audio_file)
-                logger.info(f"Audio response sent: {audio_file_path}")
-            except Exception as e:
-                logger.warning(f"Failed to send audio: {e}")
 
         except ValueError as e:
             logger.warning(f"Audio prediction failed: {e}")
