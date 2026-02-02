@@ -41,6 +41,9 @@ services:
     volumes:
       # Mount source code for live reload during development
       - ./app/src:/app/src
+      # Mount audio directories (shared with workers)
+      - ./volumes/audio_uploads:/app/volumes/audio_uploads
+      - ./volumes/audio_results:/app/volumes/audio_results
     depends_on:
       # Wait for these services to start first (not waiting for "ready" state)
       - database
@@ -55,6 +58,30 @@ services:
       start_period: 40s   # Grace period before starting checks
     networks:
       - backend
+
+  # ML Worker Service (Stage 5: Asynchronous task processing)
+  worker:
+    build:
+      context: ./app  # Same build as app service
+      dockerfile: Dockerfile
+    # No container_name - allows multiple replicas via docker-compose scale
+    command: python -m src.worker  # Run worker instead of API
+    env_file:
+      - .env
+    volumes:
+      # Mount source code for development
+      - ./app/src:/app/src
+      # Mount audio directories (shared with app service)
+      - ./volumes/audio_uploads:/app/volumes/audio_uploads
+      - ./volumes/audio_results:/app/volumes/audio_results
+    depends_on:
+      - database
+      - rabbitmq
+    restart: unless-stopped
+    networks:
+      - backend
+    deploy:
+      replicas: 2  # Default: 2 workers (can be scaled with docker-compose up --scale)
 
   # Nginx Reverse Proxy Service
   web-proxy:
