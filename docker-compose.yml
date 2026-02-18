@@ -72,19 +72,22 @@ services:
     networks:
       - backend
 
-  # ML Worker Service (Stage 5: Asynchronous task processing)
+  # ML Worker Service (independent from app, own Dockerfile)
   worker:
     build:
-      context: ./app  # Same build as app service
+      context: ./worker
       dockerfile: Dockerfile
-    # No container_name - allows multiple replicas via docker-compose scale
-    command: python -m src.worker  # Run worker instead of API
     env_file:
       - .env
     volumes:
-      # Mount source code for development
-      - ./app/src:/app/src
-      # Mount audio directories (shared with app service)
+      # Mount only shared code modules the worker needs (read-only)
+      - ./app/src/core:/app/src/core:ro
+      - ./app/src/db:/app/src/db:ro
+      - ./app/src/queue:/app/src/queue:ro
+      - ./app/src/services:/app/src/services:ro
+      - ./app/src/worker.py:/app/src/worker.py:ro
+      - ./app/src/__init__.py:/app/src/__init__.py:ro
+      # Audio directories (shared with app service)
       - ./volumes/audio_uploads:/app/volumes/audio_uploads
       - ./volumes/audio_results:/app/volumes/audio_results
     depends_on:
@@ -96,7 +99,7 @@ services:
     networks:
       - backend
     deploy:
-      replicas: 2  # Default: 2 workers (can be scaled with docker-compose up --scale)
+      replicas: 2
 
   # Nginx Reverse Proxy Service
   web-proxy:
