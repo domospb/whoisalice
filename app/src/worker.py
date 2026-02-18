@@ -6,7 +6,7 @@ Stage 5: Asynchronous ML task processing.
 Features:
 - Consumes tasks from RabbitMQ
 - Validates input data
-- Performs ML predictions (mock for now)
+- Performs ML predictions via HuggingFace Inference API
 - Deducts balance and creates transactions
 - Saves results to database
 """
@@ -32,6 +32,7 @@ from .db.repositories.transaction import TransactionRepository
 from .services.audio_service import AudioService
 from .services.stt_service import STTService
 from .services.tts_service import TTSService
+from .services.chat_service import ChatService
 from .queue.connection import get_rabbitmq_connection
 from .queue.consumer import TaskConsumer
 
@@ -61,10 +62,11 @@ class MLWorker:
         self.rabbitmq_connection = rabbitmq_connection
         self.consumer = None
 
-        # Services (will be initialized per-task with session)
+        # ML Services (use HuggingFace Inference API)
         self.audio_service = AudioService()
         self.stt_service = STTService()
         self.tts_service = TTSService()
+        self.chat_service = ChatService()
 
         logger.info(f"MLWorker initialized: {WORKER_ID}")
 
@@ -196,7 +198,7 @@ class MLWorker:
         self, input_text: str, model_name: str, worker_id: str
     ) -> dict:
         """
-        Process text input.
+        Process text input using chat model and TTS.
 
         Args:
             input_text: Text input
@@ -206,17 +208,11 @@ class MLWorker:
         Returns:
             dict with prediction result
         """
-        logger.debug(f"[{worker_id}] Processing text: {input_text[:50]}...")
+        logger.info(f"[{worker_id}] Processing text: {input_text[:50]}...")
 
-        # Mock: Generate response
-        response_text = (
-            f"Mock response to: '{input_text[:50]}...' "
-            f"(Model: {model_name}, Worker: {worker_id})"
-        )
-
-        # Generate audio (TTS mock)
-        # Note: Audio file will be saved with task_id in the service
-        logger.info(f"[{worker_id}] Generating TTS audio (mock)")
+        # Generate response using chat model
+        response_text = await self.chat_service.generate_response(input_text)
+        logger.info(f"[{worker_id}] Chat response: {response_text[:80]}...")
 
         return {
             "input": input_text,
@@ -229,7 +225,7 @@ class MLWorker:
         self, audio_path: str, model_name: str, worker_id: str
     ) -> dict:
         """
-        Process audio input.
+        Process audio input: STT -> Chat -> TTS.
 
         Args:
             audio_path: Path to audio file
@@ -239,28 +235,29 @@ class MLWorker:
         Returns:
             dict with prediction result
         """
-        logger.debug(f"[{worker_id}] Processing audio: {audio_path}")
+        logger.info(f"[{worker_id}] Processing audio: {audio_path}")
 
         # Validate audio file exists
         if not Path(audio_path).exists():
             raise ValueError(f"Audio file not found: {audio_path}")
 
-        # STT: Transcribe audio (mock)
+        # STT: Transcribe audio to text
         transcription = await self.stt_service.transcribe(audio_path)
-        logger.info(f"[{worker_id}] Transcription: {transcription[:50]}...")
+        logger.info(f"[{worker_id}] Transcription: {transcription[:80]}...")
 
-        # Mock: Generate response
-        response_text = (
-            f"Mock response to audio: '{transcription[:50]}...' "
-            f"(Model: {model_name}, Worker: {worker_id})"
-        )
+        # Chat: Generate response based on transcription
+        response_text = await self.chat_service.generate_response(transcription)
+        logger.info(f"[{worker_id}] Chat response: {response_text[:80]}...")
 
-        # TTS: Generate audio response (mock)
-        logger.info(f"[{worker_id}] Generating TTS audio (mock)")
+        # TTS: Generate audio response
+        result_path = audio_path.replace(".ogg", "_result.wav")
+        await self.tts_service.synthesize(response_text, result_path)
+        logger.info(f"[{worker_id}] TTS audio saved: {result_path}")
 
         return {
             "transcription": transcription,
             "output": response_text,
+            "audio_result": result_path,
             "model": model_name,
             "worker": worker_id,
         }
