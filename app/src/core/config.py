@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # Telegram
     TELEGRAM_BOT_TOKEN: str = ""
 
+    # HuggingFace
+    HUGGINGFACE_API_TOKEN: str = ""
+    HF_STT_MODEL: str = "openai/whisper-medium"
+    HF_TTS_MODEL: str = "facebook/mms-tts-rus"
+    HF_CHAT_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
+
     class Config:
         """Pydantic config."""
 
