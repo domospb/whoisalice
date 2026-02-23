@@ -59,9 +59,7 @@ class TTSService:
         async with aiofiles.open(output_path, "wb") as f:
             await f.write(audio_bytes)
 
-        logger.info(
-            f"Audio saved to: {output_path} ({len(audio_bytes)} bytes)"
-        )
+        logger.info(f"Audio saved to: {output_path} ({len(audio_bytes)} bytes)")
         return output_path
 
     async def synthesize_bytes(self, text: str) -> bytes:

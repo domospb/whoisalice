@@ -61,6 +61,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"  # Local dev only: API/docs on localhost (production: use nginx on 80/443 only)
     restart: unless-stopped
     healthcheck:
       # Check if app is healthy by calling /health endpoint
@@ -79,6 +81,9 @@ services:
       dockerfile: Dockerfile
     env_file:
       - .env
+    environment:
+      POSTGRES_HOST: database
+      RABBITMQ_HOST: rabbitmq
     volumes:
       # Mount only shared code modules the worker needs (read-only)
       - ./app/src/core:/app/src/core:ro

@@ -297,7 +297,7 @@ async def cmd_status(message: Message):
 
         try:
             result = await prediction_service.get_prediction_result(
-                UUID(user_id), UUID(task_id)
+                UUID(task_id), UUID(user_id)
             )
 
             status_emoji = {
@@ -313,7 +313,7 @@ async def cmd_status(message: Message):
                 f"{emoji} *Task Status*\n\n"
                 f"Task ID: `{result['task_id']}`\n"
                 f"Status: *{result['status'].upper()}*\n"
-                f"Model: {result['model_name']}\n"
+                f"Model: {result.get('model_name', 'Unknown')}\n"
             )
 
             if result["status"] == "completed" and result.get("result_text"):
