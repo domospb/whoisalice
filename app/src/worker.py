@@ -6,7 +6,7 @@ Stage 5: Asynchronous ML task processing.
 Features:
 - Consumes tasks from RabbitMQ
 - Validates input data
-- Performs ML predictions (mock for now)
+- Performs ML predictions via HuggingFace Inference API
 - Deducts balance and creates transactions
 - Saves results to database
 """
@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
 )
 
+from .core.config import settings  # noqa: F401 - set HF_INFERENCE_ENDPOINT before HF import
 from .db.config import get_database_url
 from .db.repositories.ml_model import MLModelRepository
 from .db.repositories.ml_task import MLTaskRepository, PredictionResultRepository
@@ -32,6 +33,7 @@ from .db.repositories.transaction import TransactionRepository
 from .services.audio_service import AudioService
 from .services.stt_service import STTService
 from .services.tts_service import TTSService
+from .services.chat_service import ChatService
 from .queue.connection import get_rabbitmq_connection
 from .queue.consumer import TaskConsumer
 
@@ -61,10 +63,11 @@ class MLWorker:
         self.rabbitmq_connection = rabbitmq_connection
         self.consumer = None
 
-        # Services (will be initialized per-task with session)
+        # ML Services (use HuggingFace Inference API)
         self.audio_service = AudioService()
         self.stt_service = STTService()
         self.tts_service = TTSService()
+        self.chat_service = ChatService()
 
         logger.info(f"MLWorker initialized: {WORKER_ID}")
 
@@ -72,8 +75,13 @@ class MLWorker:
         """
         Process a single ML task.
 
+        Cross-container contract: queue carries task_id (and optional payload);
+        worker loads full task from DB. For audio, task.input_data is the path
+        to the file; app and worker share the same path via volume mount
+        (e.g. volumes/audio_uploads/<task_id>.ogg in both containers).
+
         Args:
-            message_data: Task data from queue
+            message_data: Task data from queue (task_id, user_id, model_id, ...)
             worker_id: Worker identifier
 
         Returns:
@@ -129,11 +137,28 @@ class MLWorker:
                         task.input_data, model.name, worker_id
                     )
                 elif task.input_type == "audio":
+                    # Path from DB; must be visible in this container (shared volume)
                     result_data = await self._process_audio(
                         task.input_data, model.name, worker_id
                     )
                 else:
                     raise ValueError(f"Unsupported input type: {task.input_type}")
+
+                # Partial result (e.g. TTS failed after STT+Chat): save and mark failed, no charge
+                if result_data.get("partial"):
+                    prediction_result = await result_repo.create(
+                        prediction_data=json.dumps(result_data),
+                        valid_data=0,
+                        invalid_data=1,
+                    )
+                    task.result_id = prediction_result.id
+                    await mltask_repo.fail(
+                        task_id, result_data.get("error", "Unknown error")
+                    )
+                    logger.info(
+                        f"[{worker_id}] Task {task_id} marked as failed (partial result saved)"
+                    )
+                    return False
 
                 # Validate result
                 valid_count = 1 if result_data else 0
@@ -196,7 +221,7 @@ class MLWorker:
         self, input_text: str, model_name: str, worker_id: str
     ) -> dict:
         """
-        Process text input.
+        Process text input using chat model and TTS.
 
         Args:
             input_text: Text input
@@ -206,17 +231,11 @@ class MLWorker:
         Returns:
             dict with prediction result
         """
-        logger.debug(f"[{worker_id}] Processing text: {input_text[:50]}...")
+        logger.info(f"[{worker_id}] Processing text: {input_text[:50]}...")
 
-        # Mock: Generate response
-        response_text = (
-            f"Mock response to: '{input_text[:50]}...' "
-            f"(Model: {model_name}, Worker: {worker_id})"
-        )
-
-        # Generate audio (TTS mock)
-        # Note: Audio file will be saved with task_id in the service
-        logger.info(f"[{worker_id}] Generating TTS audio (mock)")
+        # Generate response using chat model
+        response_text = await self.chat_service.generate_response(input_text)
+        logger.info(f"[{worker_id}] Chat response: {response_text[:80]}...")
 
         return {
             "input": input_text,
@@ -229,7 +248,7 @@ class MLWorker:
         self, audio_path: str, model_name: str, worker_id: str
     ) -> dict:
         """
-        Process audio input.
+        Process audio input: STT -> Chat -> TTS.
 
         Args:
             audio_path: Path to audio file
@@ -239,28 +258,40 @@ class MLWorker:
         Returns:
             dict with prediction result
         """
-        logger.debug(f"[{worker_id}] Processing audio: {audio_path}")
+        logger.info(f"[{worker_id}] Processing audio: {audio_path}")
 
         # Validate audio file exists
         if not Path(audio_path).exists():
             raise ValueError(f"Audio file not found: {audio_path}")
 
-        # STT: Transcribe audio (mock)
+        # STT: Transcribe audio to text
         transcription = await self.stt_service.transcribe(audio_path)
-        logger.info(f"[{worker_id}] Transcription: {transcription[:50]}...")
+        logger.info(f"[{worker_id}] Transcription: {transcription[:80]}...")
 
-        # Mock: Generate response
-        response_text = (
-            f"Mock response to audio: '{transcription[:50]}...' "
-            f"(Model: {model_name}, Worker: {worker_id})"
-        )
+        # Chat: Generate response based on transcription
+        response_text = await self.chat_service.generate_response(transcription)
+        logger.info(f"[{worker_id}] Chat response: {response_text[:80]}...")
 
-        # TTS: Generate audio response (mock)
-        logger.info(f"[{worker_id}] Generating TTS audio (mock)")
+        # TTS: Generate audio response (on failure return partial result for notification)
+        result_path = audio_path.replace(".ogg", "_result.wav")
+        try:
+            await self.tts_service.synthesize(response_text, result_path)
+            logger.info(f"[{worker_id}] TTS audio saved: {result_path}")
+        except Exception as e:
+            logger.warning(f"[{worker_id}] TTS failed, returning partial result: {e}")
+            return {
+                "partial": True,
+                "transcription": transcription,
+                "output": response_text,
+                "error": str(e),
+                "model": model_name,
+                "worker": worker_id,
+            }
 
         return {
             "transcription": transcription,
             "output": response_text,
+            "audio_result": result_path,
             "model": model_name,
             "worker": worker_id,
         }

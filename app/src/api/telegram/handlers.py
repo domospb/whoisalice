@@ -297,7 +297,7 @@ async def cmd_status(message: Message):
 
         try:
             result = await prediction_service.get_prediction_result(
-                UUID(user_id), UUID(task_id)
+                UUID(task_id), UUID(user_id)
             )
 
             status_emoji = {
@@ -313,7 +313,7 @@ async def cmd_status(message: Message):
                 f"{emoji} *Task Status*\n\n"
                 f"Task ID: `{result['task_id']}`\n"
                 f"Status: *{result['status'].upper()}*\n"
-                f"Model: {result['model_name']}\n"
+                f"Model: {result.get('model_name', 'Unknown')}\n"
             )
 
             if result["status"] == "completed" and result.get("result_text"):
@@ -370,6 +370,7 @@ async def handle_text_message(message: Message):
                 user_id=UUID(user_id),
                 input_text=message.text,
                 model_name="GPT-4 TTS",
+                telegram_chat_id=message.chat.id,
             )
 
             response_text = (
@@ -435,6 +436,7 @@ async def handle_voice_message(message: Message):
                 audio_file=audio_bytes,
                 filename=f"{voice.file_id}.ogg",
                 model_name="Whisper STT",
+                telegram_chat_id=message.chat.id,
             )
 
             response_text = (

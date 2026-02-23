@@ -11,9 +11,11 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .core.config import settings  # first: set HF_INFERENCE_ENDPOINT before HF client import
+from .db.init_db import run_telegram_notification_migration
 from .api.rest import auth, balance, predict, history
 from .api.telegram.bot import setup_bot, start_bot
-from .core.config import settings
+from .api.telegram.notifier import run_notifier_loop
 from .queue.connection import get_rabbitmq_connection
 from .queue.publisher import TaskPublisher
 
@@ -34,10 +36,13 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Add CORS middleware
+# Add CORS middleware (set CORS_ORIGINS in .env for production)
+_cors_origins = [
+    o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()
+] or ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -80,6 +85,13 @@ async def startup_event():
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     logger.info("API documentation available at /docs")
 
+    # Run DB migrations for new columns (idempotent)
+    try:
+        await run_telegram_notification_migration()
+        logger.info("DB migration (telegram notifications) applied")
+    except Exception as e:
+        logger.warning("DB migration skipped or failed (table may not exist yet): %s", e)
+
     # Initialize RabbitMQ connection and publisher
     try:
         logger.info("Initializing RabbitMQ connection...")
@@ -115,6 +127,9 @@ async def startup_event():
             # Run bot in background task
             asyncio.create_task(start_bot())
             logger.info("Telegram bot started successfully")
+            # Run task completion notifier (sends Telegram when tasks complete/fail)
+            asyncio.create_task(run_notifier_loop())
+            logger.info("Task notification loop started")
         else:
             logger.warning("Telegram bot not started (token not configured)")
     except Exception as e:

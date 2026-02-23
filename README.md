@@ -34,6 +34,8 @@ cp .env.example .env
 # - Strong passwords for POSTGRES_PASSWORD and RABBITMQ_DEFAULT_PASS
 # - SECRET_KEY for JWT (generate with: openssl rand -hex 32)
 # - TELEGRAM_BOT_TOKEN (get from @BotFather)
+# - HUGGINGFACE_API_TOKEN with **Make calls to Inference Providers** (fine-grained token)
+#   Create: https://huggingface.co/settings/tokens → Fine-grained → enable Inference
 nano .env
 ```
 
@@ -58,6 +60,88 @@ python init_db.py
 - **Health Check**: http://localhost:8000/health
 - **RabbitMQ UI**: http://localhost:15672
 - **Telegram Bot**: Use your bot from @BotFather
+
+## Setting up Yandex TTS (optional)
+
+By default, TTS uses **Hugging Face** Inference Providers. To use **Yandex SpeechKit** TTS instead, follow these steps.
+
+### Step 1: Create a Yandex Cloud account
+
+1. Go to [Yandex Cloud](https://cloud.yandex.com/) and sign in or register.
+2. Create a **billing account** and link a payment method (required for SpeechKit; there is a free tier).
+
+### Step 2: Create a folder and enable SpeechKit
+
+1. In the [Yandex Cloud Console](https://console.cloud.yandex.com/), create a **folder** (e.g. `whoisalice`) if you don’t have one.
+2. Open **SpeechKit** in the catalog: [SpeechKit](https://console.cloud.yandex.com/folders/<FOLDER_ID>/speechkit) (replace `<FOLDER_ID>` with your folder ID).
+3. Enable the service if prompted.
+
+### Step 3: Create a service account and API key
+
+Do this in the [Yandex Cloud Console](https://console.cloud.yandex.com/). Replace `<FOLDER_ID>` below with your folder ID (you see it in the console URL or in the folder list).
+
+#### 3.1 Open Service accounts
+
+1. In the left sidebar, open **All services** (or the menu icon).
+2. Under **Management**, click **IAM** (Identity and Access Management).
+3. In the IAM page, open the **Service accounts** tab.
+   - Direct link: `https://console.cloud.yandex.com/folders/<FOLDER_ID>/service-accounts`
+
+#### 3.2 Create a service account
+
+1. Click **Create service account** (top right).
+2. **Name**: e.g. `whoisalice-tts` (any name you like).
+3. **Description** (optional): e.g. `TTS for WhoIsAlice`.
+4. Click **Add role** and assign a role that allows SpeechKit:
+   - In the role list, find **SpeechKit** (or search for `speechkit`).
+   - Select **SpeechKit User** (role id: `ai.speechkit-stt.user` — it covers both STT and TTS).
+   - If you don’t see “SpeechKit User”, look for **SpeechKit** → **User** or any role that grants access to SpeechKit API.
+5. Click **Create** at the bottom. The new service account appears in the list.
+
+#### 3.3 Create an API key for the service account
+
+1. In the **Service accounts** list, click the name of the service account you just created (e.g. `whoisalice-tts`).
+2. Open the **API keys** tab.
+3. Click **Create API key**.
+4. **Description** (optional): e.g. `WhoIsAlice TTS`.
+5. Click **Create**. A dialog shows the key:
+   - **Key ID** (for reference only).
+   - **Secret key** — this is your API key. Copy it immediately; it is shown only once and cannot be viewed again.
+6. Paste the secret key into a secure place (password manager or your `.env` file as `YANDEX_API_KEY=...`). Then close the dialog.
+
+You’re done with Step 3. Use the copied value as `YANDEX_API_KEY` in Step 4.
+
+### Step 4: Configure the app
+
+1. In your project root, copy the example env and open `.env`:
+   ```bash
+   cp .env.example .env
+   nano .env   # or your editor
+   ```
+2. Set TTS to Yandex and add your key and options:
+   ```env
+   TTS_PROVIDER=yandex
+   YANDEX_API_KEY=your-api-key-from-step-3
+   YANDEX_TTS_VOICE=filipp
+   YANDEX_TTS_LANG=ru-RU
+   ```
+   - **YANDEX_API_KEY** (required): The API key from Step 3.
+   - **YANDEX_FOLDER_ID**: Leave empty when using a service account API key (Yandex uses the key’s folder automatically). Only set when using IAM token instead of API key.
+   - **YANDEX_TTS_VOICE**: Voice name, e.g. `filipp`, `alena`, `john` (English). Full list: [SpeechKit voices](https://cloud.yandex.com/docs/speechkit/tts/voices).
+   - **YANDEX_TTS_LANG**: Language code: `ru-RU`, `en-US`, `de-DE`, etc.
+
+3. Restart the app and workers so they load the new env:
+   ```bash
+   docker compose up -d --build
+   ```
+
+### Step 5: Verify
+
+- Send a voice or text prediction that triggers TTS (e.g. voice message via Telegram or REST).
+- Check worker logs: `docker compose logs worker` — you should see `TTSService initialized: Yandex SpeechKit (voice=..., lang=...)`.
+- If you get 401/403, check the API key and that the service account has the SpeechKit role.
+
+To switch back to Hugging Face TTS, set `TTS_PROVIDER=huggingface` (or remove `YANDEX_API_KEY`) and restart.
 
 ## Usage
 
@@ -251,6 +335,35 @@ docker-compose logs -f worker
 3. Try commands: `/start`, `/register`, `/login`, etc.
 4. Send text/voice messages and receive task_id
 5. Tasks are processed asynchronously by workers
+
+## Troubleshooting
+
+### Tasks stay PENDING
+
+1. **Workers not running**  
+   ```bash
+   docker compose ps
+   ```
+   Ensure `worker` service is up. Restart: `docker compose up -d worker`.
+
+2. **Worker logs**  
+   ```bash
+   docker compose logs worker
+   ```
+   Look for "Consuming messages from ml_tasks" and any connection/import errors.
+
+3. **RabbitMQ**  
+   Open http://localhost:15672 → Queues → `ml_tasks`. Check "Ready" messages (unconsumed). If messages pile up, workers are not consuming.
+
+### Hugging Face token not used / 403 / 404
+
+- Inference uses **Hugging Face Inference Providers** (router); requires `huggingface_hub>=0.31` and a **fine-grained** token with **"Make calls to Inference Providers"** (not only Read).
+- Create: https://huggingface.co/settings/tokens → "+ Create new token" → **Fine-grained** → under **Inference** enable **"Make calls to Inference Providers"**.
+- Set `HUGGINGFACE_API_TOKEN` in `.env` and restart: `docker compose up -d`. Rebuild images after upgrading deps: `docker compose up -d --build`.
+- **Inference provider**: Default is **Together AI** (`HF_PROVIDER=together`). Enable it at **https://hf.co/settings/inference-providers** so the router can route requests. Text model: [zai-org/GLM-5](https://huggingface.co/zai-org/GLM-5?inference_provider=together). Image-to-text: [moonshotai/Kimi-K2.5](https://huggingface.co/moonshotai/Kimi-K2.5?inference_provider=together). STT stays Whisper (`HF_STT_MODEL=openai/whisper-large-v3`).
+- **402 Payment Required**: If the router picks a paid provider, add credits at https://huggingface.co/settings/billing.
+- **"Model not available" / 404**: Set `HF_CHAT_MODEL`, `HF_IMAGE_TO_TEXT_MODEL`, `HF_STT_MODEL`, or `HF_TTS_MODEL` in `.env` to a model supported by your provider. Links: [STT](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition), [TTS](https://huggingface.co/models?pipeline_tag=text-to-speech), [Chat](https://huggingface.co/models?pipeline_tag=conversational), [Vision](https://huggingface.co/models?pipeline_tag=image-text-to-text).
+- **TTS: Yandex SpeechKit**: To use Yandex TTS, set `TTS_PROVIDER=yandex` and `YANDEX_API_KEY` in `.env`. See [Setting up Yandex TTS](#setting-up-yandex-tts-optional) above. If Yandex returns 401/403, check the API key and service account role (`SpeechKit User`).
 
 ## Commands
 

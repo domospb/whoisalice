@@ -34,6 +34,7 @@ class MLTaskRepository:
         input_type: str,
         output_type: str,
         status: str = "pending",
+        telegram_chat_id: int | None = None,
     ) -> MLTaskModel:
         """
         Create a new ML task.
@@ -45,6 +46,7 @@ class MLTaskRepository:
             input_type: Type of input (text or audio)
             output_type: Type of output (text or audio)
             status: Initial status (default: pending)
+            telegram_chat_id: Optional Telegram chat ID for completion notification
 
         Returns:
             Created ML task
@@ -58,6 +60,7 @@ class MLTaskRepository:
             input_type=input_type,
             output_type=output_type,
             status=status,
+            telegram_chat_id=telegram_chat_id,
         )
 
         self.session.add(task)
@@ -206,6 +209,35 @@ class MLTaskRepository:
         logger.info(f"Task completed: {task_id}")
 
         return task
+
+    async def get_pending_notifications(self) -> list[MLTaskModel]:
+        """
+        Get tasks that are completed or failed, have telegram_chat_id set,
+        and have not been notified yet.
+
+        Returns:
+            List of ML tasks to notify
+        """
+        result = await self.session.execute(
+            select(MLTaskModel)
+            .where(
+                MLTaskModel.status.in_(["completed", "failed"]),
+                MLTaskModel.telegram_chat_id.isnot(None),
+                MLTaskModel.notified_at.is_(None),
+            )
+            .options(
+                selectinload(MLTaskModel.model),
+                selectinload(MLTaskModel.result),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def mark_notified(self, task_id: UUID) -> None:
+        """Set notified_at for a task."""
+        task = await self.get_by_id(task_id)
+        if task:
+            task.notified_at = datetime.utcnow()
+            await self.session.commit()
 
 
 class PredictionResultRepository:

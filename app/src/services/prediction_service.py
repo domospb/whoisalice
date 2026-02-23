@@ -7,6 +7,7 @@ Coordinates ML prediction workflow:
 - Task creation
 - Queue publishing (Stage 5: async processing)
 """
+import json
 import logging
 from typing import Optional
 from uuid import UUID
@@ -48,7 +49,11 @@ class PredictionService:
         logger.info("PredictionService initialized (Stage 5: async mode)")
 
     async def process_text_prediction(
-        self, user_id: UUID, input_text: str, model_name: str = "GPT-4 TTS"
+        self,
+        user_id: UUID,
+        input_text: str,
+        model_name: str = "GPT-4 TTS",
+        telegram_chat_id: int | None = None,
     ) -> dict:
         """
         Create text prediction task and publish to queue.
@@ -100,6 +105,7 @@ class PredictionService:
             input_type="text",
             output_type="audio",
             status="pending",
+            telegram_chat_id=telegram_chat_id,
         )
 
         logger.info(f"MLTask created: {task.id} (status=pending, cost=${cost})")
@@ -140,6 +146,7 @@ class PredictionService:
         audio_file: bytes,
         filename: str,
         model_name: str = "Whisper STT",
+        telegram_chat_id: int | None = None,
     ) -> dict:
         """
         Create audio prediction task and publish to queue.
@@ -189,6 +196,7 @@ class PredictionService:
             input_type="audio",
             output_type="audio",
             status="pending",
+            telegram_chat_id=telegram_chat_id,
         )
 
         logger.info(f"MLTask created: {task.id} (status=pending, cost=${cost})")
@@ -283,12 +291,22 @@ class PredictionService:
             "completed_at": task.completed_at.isoformat()
             if task.completed_at
             else None,
+            "model_name": task.model.name if task.model else "Unknown",
+            "cost": float(task.model.cost_per_prediction) if task.model else 0.0,
         }
 
         if task.result:
             result["prediction_data"] = task.result.prediction_data
             result["valid_count"] = task.result.valid_data
             result["invalid_count"] = task.result.invalid_data
+            # Parse prediction_data for Telegram/API (worker stores JSON with output, transcription)
+            if task.result.prediction_data:
+                try:
+                    data = json.loads(task.result.prediction_data)
+                    result["result_text"] = data.get("output")
+                    result["transcription"] = data.get("transcription")
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
         if task.error_message:
             result["error_message"] = task.error_message
