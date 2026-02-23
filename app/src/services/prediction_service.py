@@ -49,7 +49,11 @@ class PredictionService:
         logger.info("PredictionService initialized (Stage 5: async mode)")
 
     async def process_text_prediction(
-        self, user_id: UUID, input_text: str, model_name: str = "GPT-4 TTS"
+        self,
+        user_id: UUID,
+        input_text: str,
+        model_name: str = "GPT-4 TTS",
+        telegram_chat_id: int | None = None,
     ) -> dict:
         """
         Create text prediction task and publish to queue.
@@ -101,6 +105,7 @@ class PredictionService:
             input_type="text",
             output_type="audio",
             status="pending",
+            telegram_chat_id=telegram_chat_id,
         )
 
         logger.info(f"MLTask created: {task.id} (status=pending, cost=${cost})")
@@ -141,6 +146,7 @@ class PredictionService:
         audio_file: bytes,
         filename: str,
         model_name: str = "Whisper STT",
+        telegram_chat_id: int | None = None,
     ) -> dict:
         """
         Create audio prediction task and publish to queue.
@@ -190,6 +196,7 @@ class PredictionService:
             input_type="audio",
             output_type="audio",
             status="pending",
+            telegram_chat_id=telegram_chat_id,
         )
 
         logger.info(f"MLTask created: {task.id} (status=pending, cost=${cost})")

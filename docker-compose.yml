@@ -82,8 +82,20 @@ services:
     env_file:
       - .env
     environment:
+      PYTHONPATH: /app
       POSTGRES_HOST: database
       RABBITMQ_HOST: rabbitmq
+      # TTS: pass through so worker uses Yandex when set in .env (run from project root)
+      TTS_PROVIDER: ${TTS_PROVIDER:-huggingface}
+      YANDEX_API_KEY: ${YANDEX_API_KEY:-}
+      YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID:-}
+      YANDEX_TTS_VOICE: ${YANDEX_TTS_VOICE:-filipp}
+      YANDEX_TTS_LANG: ${YANDEX_TTS_LANG:-ru-RU}
+      # HF (for STT/Chat when TTS is Yandex)
+      HF_PROVIDER: ${HF_PROVIDER:-hf-inference}
+      HUGGINGFACE_API_TOKEN: ${HUGGINGFACE_API_TOKEN:-}
+      HF_STT_MODEL: ${HF_STT_MODEL:-openai/whisper-large-v3}
+      HF_CHAT_MODEL: ${HF_CHAT_MODEL:-HuggingFaceTB/SmolLM3-3B}
     volumes:
       # Mount only shared code modules the worker needs (read-only)
       - ./app/src/core:/app/src/core:ro

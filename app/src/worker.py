@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
 )
 
+from .core.config import settings  # noqa: F401 - set HF_INFERENCE_ENDPOINT before HF import
 from .db.config import get_database_url
 from .db.repositories.ml_model import MLModelRepository
 from .db.repositories.ml_task import MLTaskRepository, PredictionResultRepository
@@ -74,8 +75,13 @@ class MLWorker:
         """
         Process a single ML task.
 
+        Cross-container contract: queue carries task_id (and optional payload);
+        worker loads full task from DB. For audio, task.input_data is the path
+        to the file; app and worker share the same path via volume mount
+        (e.g. volumes/audio_uploads/<task_id>.ogg in both containers).
+
         Args:
-            message_data: Task data from queue
+            message_data: Task data from queue (task_id, user_id, model_id, ...)
             worker_id: Worker identifier
 
         Returns:
@@ -131,11 +137,28 @@ class MLWorker:
                         task.input_data, model.name, worker_id
                     )
                 elif task.input_type == "audio":
+                    # Path from DB; must be visible in this container (shared volume)
                     result_data = await self._process_audio(
                         task.input_data, model.name, worker_id
                     )
                 else:
                     raise ValueError(f"Unsupported input type: {task.input_type}")
+
+                # Partial result (e.g. TTS failed after STT+Chat): save and mark failed, no charge
+                if result_data.get("partial"):
+                    prediction_result = await result_repo.create(
+                        prediction_data=json.dumps(result_data),
+                        valid_data=0,
+                        invalid_data=1,
+                    )
+                    task.result_id = prediction_result.id
+                    await mltask_repo.fail(
+                        task_id, result_data.get("error", "Unknown error")
+                    )
+                    logger.info(
+                        f"[{worker_id}] Task {task_id} marked as failed (partial result saved)"
+                    )
+                    return False
 
                 # Validate result
                 valid_count = 1 if result_data else 0
@@ -249,10 +272,21 @@ class MLWorker:
         response_text = await self.chat_service.generate_response(transcription)
         logger.info(f"[{worker_id}] Chat response: {response_text[:80]}...")
 
-        # TTS: Generate audio response
+        # TTS: Generate audio response (on failure return partial result for notification)
         result_path = audio_path.replace(".ogg", "_result.wav")
-        await self.tts_service.synthesize(response_text, result_path)
-        logger.info(f"[{worker_id}] TTS audio saved: {result_path}")
+        try:
+            await self.tts_service.synthesize(response_text, result_path)
+            logger.info(f"[{worker_id}] TTS audio saved: {result_path}")
+        except Exception as e:
+            logger.warning(f"[{worker_id}] TTS failed, returning partial result: {e}")
+            return {
+                "partial": True,
+                "transcription": transcription,
+                "output": response_text,
+                "error": str(e),
+                "model": model_name,
+                "worker": worker_id,
+            }
 
         return {
             "transcription": transcription,

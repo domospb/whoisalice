@@ -199,33 +199,66 @@ async def get_prediction(
         )
 
 
+def _safe_audio_path(task_id: UUID, base_dir: Path, suffix: str) -> Path | None:
+    """Build path to result audio only if it stays under base_dir (prevents path traversal)."""
+    base_dir = base_dir.resolve()
+    name = f"{task_id}_result{suffix}"
+    path = (base_dir / name).resolve()
+    if not path.is_relative_to(base_dir) or not path.exists():
+        return None
+    return path
+
+
 @router.get("/{task_id}/audio")
 async def get_prediction_audio(
     task_id: str,
     user_id: str = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_db),
 ):
     """
     Download result audio file.
 
-    Requires authentication.
+    Requires authentication. Verifies task ownership and uses safe path resolution.
     """
     logger.info(f"GET /predict/{task_id}/audio called for user {user_id}")
 
-    # Build audio file path
-    audio_filename = f"{task_id}_result.ogg"
-    audio_path = Path(settings.AUDIO_RESULTS_DIR) / audio_filename
+    try:
+        task_uuid = UUID(task_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid task ID format",
+        )
 
-    if not audio_path.exists():
-        logger.warning(f"Audio file not found: {audio_path}")
+    audio_service = AudioService()
+    prediction_service = PredictionService(session, audio_service)
+    try:
+        await prediction_service.get_prediction_result(
+            task_id=task_uuid, user_id=UUID(user_id)
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+    upload_dir = Path(settings.AUDIO_UPLOAD_DIR).resolve()
+    results_dir = Path(settings.AUDIO_RESULTS_DIR).resolve()
+    audio_path = _safe_audio_path(task_uuid, upload_dir, ".wav") or _safe_audio_path(
+        task_uuid, results_dir, ".ogg"
+    )
+    if not audio_path:
+        logger.warning(f"Audio file not found for task {task_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Audio file not found",
         )
 
     logger.info(f"Serving audio file: {audio_path}")
-
+    suffix = audio_path.suffix.lower()
+    media_type = "audio/ogg" if suffix == ".ogg" else "audio/wav"
     return FileResponse(
         path=str(audio_path),
-        media_type="audio/ogg",
-        filename=audio_filename,
+        media_type=media_type,
+        filename=f"{task_id}_result{suffix}",
     )

@@ -370,6 +370,7 @@ async def handle_text_message(message: Message):
                 user_id=UUID(user_id),
                 input_text=message.text,
                 model_name="GPT-4 TTS",
+                telegram_chat_id=message.chat.id,
             )
 
             response_text = (
@@ -435,6 +436,7 @@ async def handle_voice_message(message: Message):
                 audio_file=audio_bytes,
                 filename=f"{voice.file_id}.ogg",
                 model_name="Whisper STT",
+                telegram_chat_id=message.chat.id,
             )
 
             response_text = (

@@ -8,6 +8,7 @@ Loads environment variables and provides configuration for:
 - File storage paths
 """
 import logging
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
@@ -35,20 +36,36 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "WhoIsAlice"
     VERSION: str = "0.1.0"
     DESCRIPTION: str = "AI Voice Assistant API"
+    # CORS: in production set e.g. CORS_ORIGINS=https://app.example.com,https://admin.example.com
+    CORS_ORIGINS: str = "*"
 
-    # Storage
-    AUDIO_UPLOAD_DIR: str = "volumes/audio"
-    AUDIO_RESULTS_DIR: str = "volumes/results"
+    # Storage (must match docker-compose volume mounts: audio_uploads, audio_results)
+    AUDIO_UPLOAD_DIR: str = "volumes/audio_uploads"
+    AUDIO_RESULTS_DIR: str = "volumes/audio_results"
     MAX_AUDIO_SIZE_MB: int = 10
 
     # Telegram
     TELEGRAM_BOT_TOKEN: str = ""
 
-    # HuggingFace
+    # HuggingFace Inference Providers (router) - Together AI as default
+    HF_INFERENCE_ENDPOINT: str = "https://router.huggingface.co"
+    HF_PROVIDER: str = "together"  # Together AI; enable at https://hf.co/settings/inference-providers
     HUGGINGFACE_API_TOKEN: str = ""
-    HF_STT_MODEL: str = "openai/whisper-medium"
-    HF_TTS_MODEL: str = "facebook/mms-tts-rus"
-    HF_CHAT_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
+    # STT: keep Whisper (works with Together/hf-inference)
+    HF_STT_MODEL: str = "openai/whisper-large-v3"
+    # TTS: set a model supported by your provider; see https://huggingface.co/models?pipeline_tag=text-to-speech
+    HF_TTS_MODEL: str = "microsoft/speecht5_tts"
+    # TTS provider: "huggingface" (default) or "yandex"
+    TTS_PROVIDER: str = "huggingface"
+    # Yandex SpeechKit TTS (when TTS_PROVIDER=yandex): https://cloud.yandex.com/docs/speechkit
+    YANDEX_API_KEY: str = ""  # Service account API key; create in Yandex Cloud Console
+    YANDEX_FOLDER_ID: str = ""  # Не передавать при API-ключе сервисного аккаунта (только для IAM token)
+    YANDEX_TTS_VOICE: str = "filipp"  # e.g. filipp, alena, john (en-US); see docs for list
+    YANDEX_TTS_LANG: str = "ru-RU"  # ru-RU, en-US, etc.
+    # Text generation: GLM-5 via Together
+    HF_CHAT_MODEL: str = "zai-org/GLM-5"
+    # Image-to-text (vision): Kimi-K2.5 via Together
+    HF_IMAGE_TO_TEXT_MODEL: str = "moonshotai/Kimi-K2.5"
 
     class Config:
         """Pydantic config."""
@@ -64,6 +81,9 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+
+# Use new HF inference endpoint (huggingface_hub reads HF_INFERENCE_ENDPOINT at import time)
+os.environ["HF_INFERENCE_ENDPOINT"] = settings.HF_INFERENCE_ENDPOINT
 
 # Ensure storage directories exist
 settings.ensure_directories()
